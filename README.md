@@ -8,6 +8,10 @@
 > **This is the Windows fork** of [PopaSpinka/PopkaStudio](https://github.com/PopaSpinka/PopkaStudio): the same editor,
 > plus a classic Windows 10/11 installer (`PopkaStudio-Setup.exe` in [Releases](https://github.com/wufwufmakc/PopkaStudio/releases)) —
 > see [Install — Windows 10 and 11](#install--windows-10-and-11). macOS and Linux work as in the original.
+>
+> **Windows support is fresh — please test it!** Found a bug? Open an
+> [issue](https://github.com/wufwufmakc/PopkaStudio/issues) or write to **wufwufmakc@gmail.com**
+> (the installer's log helps: `%LOCALAPPDATA%\PopkaStudio\install.log`).
 
 ![PopkaStudio](docs/screenshots/editor.png)
 
