@@ -1,9 +1,11 @@
 # PopkaStudio-Setup-<version>.exe: built on Windows, installed there once as a test (without the ESP32 core, which is
-# 1.5-3 GB: the editor starts and answers; Load needs the real board). A tag v* puts the .exe into that tag's release.
+# 1.5-3 GB: the editor starts and answers; Load needs the real board). A tag v* puts the .exe into that tag's release;
+# a push to main - into the release v<VERSION>-win (made once per version, the .exe replaced on each push).
 name: Windows installer
 
 on:
   push:
+    branches: [main]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
@@ -83,13 +85,15 @@ jobs:
           name: PopkaStudio-Setup-${{ steps.v.outputs.version }}
           path: installer/Output/*.exe
 
-      - name: Into the release (a tag v*)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Into the release (a tag v*, or main - v<VERSION>-win)
+        if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = '${{ github.ref_name }}'
+          $tag = if ('${{ github.ref_type }}' -eq 'tag') { '${{ github.ref_name }}' } else { 'v${{ steps.v.outputs.version }}-win' }
+          $notes = 'Windows 10/11: download PopkaStudio-Setup-${{ steps.v.outputs.version }}.exe below and run it (no administrator needed). ' +
+                   'The first install downloads Python, arduino-cli and the ESP32 tools (1.5-3 GB, 5-20 minutes).'
           gh release view $tag 2>$null
-          if ($LASTEXITCODE) { gh release create $tag --title "PopkaStudio $tag" --notes "Windows: PopkaStudio-Setup.exe" }
+          if ($LASTEXITCODE) { gh release create $tag --target '${{ github.sha }}' --title "PopkaStudio ${{ steps.v.outputs.version }} for Windows" --notes $notes }
           gh release upload $tag (Get-ChildItem installer\Output\*.exe).FullName --clobber
