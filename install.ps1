@@ -89,6 +89,9 @@ if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
   if (-not (Test-Path "$Tools\uv.exe")) { Die 'uv did not install (see above).' }
 }
 Say 'Python and its libraries'
+# (uv's Python and its cache inside PopkaStudio's folder too: an uninstall takes them, nothing is left in %APPDATA%)
+$env:UV_PYTHON_INSTALL_DIR = Join-Path $Dir '.tools\python'
+$env:UV_CACHE_DIR = Join-Path $Dir '.tools\uv-cache'
 Run uv venv --quiet --python 3.12 --allow-existing .venv
 $Py = Join-Path $Dir '.venv\Scripts\python.exe'
 Run uv pip install --quiet --python $Py numpy pillow pyserial

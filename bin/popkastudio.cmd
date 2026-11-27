@@ -6,7 +6,13 @@ set "DIR=%~dp0.."
 for %%I in ("%DIR%") do set "DIR=%%~fI"
 set "PY=%DIR%\.venv\Scripts\python.exe"
 if not exist "%PY%" (
-  echo PopkaStudio is not installed yet: run  powershell -ExecutionPolicy Bypass -File "%DIR%\install.ps1"
+  rem (the installer's download step didn't finish - no internet, closed early: finish it here, in this window)
+  echo PopkaStudio's tools are not installed yet - installing them now ^(5-20 minutes the first time^)...
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%DIR%\install.ps1" -Setup
+)
+if not exist "%PY%" (
+  echo.
+  echo The install did not finish. Its log: "%DIR%\install.log"
   pause
   exit /b 1
 )
