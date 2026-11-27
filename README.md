@@ -5,6 +5,11 @@
 [Русская версия](README.ru.md) · [Video: how it started (YouTube)](https://www.youtube.com/watch?v=NHNoKUa2cDg) ·
 [Support the project](#support-the-project)
 
+> **Windows installer:** `PopkaStudio-Setup.exe` in [this fork's Releases](https://github.com/wufwufmakc/PopkaStudio/releases).
+> It installs the original PopkaStudio (a git copy of PopaSpinka/PopkaStudio), so the program's own update works.
+> Found a bug? Open an [issue](https://github.com/wufwufmakc/PopkaStudio/issues) or write to **wufwufmakc@gmail.com**
+> (attach `%LOCALAPPDATA%\PopkaStudio\setup.log` and `install.log`).
+
 ![PopkaStudio](docs/screenshots/editor.png)
 
 PopkaStudio is a visual editor for screen interfaces on ESP32 boards — a round 1.75″ watch, a 7″ ESP32-P4 display,
