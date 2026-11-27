@@ -130,7 +130,12 @@ popkastudio
 
 ## Установка — Windows 10 и 11
 
-В PowerShell (права администратора не нужны):
+**Установщик:** скачайте `PopkaStudio-Setup-<версия>.exe` из
+[Releases](https://github.com/wufwufmakc/PopkaStudio/releases) и запустите. Права администратора не нужны: он ставит
+PopkaStudio в `%LOCALAPPDATA%\PopkaStudio`, потом скачивает Python, arduino-cli и инструменты ESP32 (1,5–3 ГБ, первый
+раз 5–20 минут) и добавляет PopkaStudio в меню «Пуск» и в «Приложения» (чтобы удалить). Проекты при удалении остаются.
+
+Или в PowerShell (права администратора не нужны, нужен git):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/wufwufmakc/PopkaStudio/main/install.ps1 | iex"

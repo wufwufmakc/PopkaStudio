@@ -7,9 +7,14 @@
 # It installs: uv (Python and its libraries numpy, Pillow, pyserial), arduino-cli and the ESP32 core 3.3.11 (to build
 # and upload the firmware), the fonts, the command popkastudio (bin\popkastudio.cmd) and a Start menu shortcut.
 # Needs git (winget install --id Git.Git -e). The board's USB (ESP32-S3/P4 native USB) needs no driver on Windows 10+.
+#
+# -Setup: run by the classic installer (PopkaStudio-Setup.exe, installer/PopkaStudio.iss) in the folder it unpacked -
+# no git, no shortcut and no PATH (the installer makes its own), the log in install.log next to it.
+# POPKASTUDIO_SKIP_CORE=1: everything but the ESP32 core (a test run: the editor works, Load doesn't).
 # (This file is plain ASCII: Windows PowerShell 5.1 reads a script without a BOM in the system's code page.)
 # (Continue: in Windows PowerShell 5.1 'Stop' turns any line a native tool writes to stderr into a failure - each
 # native step's exit code is checked instead, the downloads stop on their own errors)
+param([switch]$Setup)
 $ErrorActionPreference = 'Continue'
 $ProgressPreference = 'SilentlyContinue'  # (Invoke-WebRequest's progress bar makes big downloads many times slower)
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
@@ -21,10 +26,14 @@ $CliZip = 'https://downloads.arduino.cc/arduino-cli/arduino-cli_latest_Windows_6
 
 function Say($t) { Write-Host ''; Write-Host "> $t" -ForegroundColor White }
 function Note($t) { Write-Host "  $t" }
-function Die($t) { Write-Host ''; Write-Host "x $t" -ForegroundColor Red; exit 1 }
+function Die($t) {
+  Write-Host ''; Write-Host "x $t" -ForegroundColor Red
+  if ($Setup) { Stop-Transcript | Out-Null }
+  exit 1
+}
 function Run {  # (a native tool; its exit code checked. A plain function: its -flags go through untouched)
   $exe, $rest = $args
-  & $exe @rest
+  & $exe @rest | Out-Host  # (through the host: install.log keeps it too)
   if ($LASTEXITCODE -ne 0) { Die "$exe $($rest -join ' ') failed (exit $LASTEXITCODE)" }
 }
 
@@ -33,6 +42,7 @@ if (-not [Environment]::Is64BitOperatingSystem) { Die 'PopkaStudio needs 64-bit 
 
 # ---------- 1. The code: this folder (a clone), or a fresh copy in %USERPROFILE%\PopkaStudio ----------
 $Here = $PSScriptRoot  # (empty when piped into iex)
+if ($Setup) { Start-Transcript -Force -Path (Join-Path $Here 'install.log') | Out-Null }
 if ($Here -and ((Test-Path "$Here\studio\studio.py") -or (Test-Path "$Here\PopkaStudio\studio.py"))) {
   $Dir = $Here
   if ((Test-Path "$Dir\.git") -and (Get-Command git -ErrorAction SilentlyContinue)) {
@@ -84,7 +94,8 @@ if (-not (Test-Path $Cli)) {
   }
 }
 $cores = (& $Cli core list 2>$null) -join "`n"
-if ($cores -notmatch '(?m)^esp32:esp32 +3\.3\.11 ') {
+if ($env:POPKASTUDIO_SKIP_CORE -eq '1') { Note '(the ESP32 core skipped: POPKASTUDIO_SKIP_CORE)' }
+elseif ($cores -notmatch '(?m)^esp32:esp32 +3\.3\.11 ') {
   Say 'The ESP32 tools - the longest step (1.5-3 GB, 5-20 minutes)'
   Run $Cli core update-index --additional-urls $EspUrl
   Run $Cli core install $Core --additional-urls $EspUrl
@@ -97,6 +108,11 @@ Run $Py -X utf8 -c "import sys; sys.path.insert(0, 'tools'); import halo_assets 
 # ---------- 5. The command popkastudio and a Start menu shortcut ----------
 $Run = Join-Path $Dir 'bin\popkastudio.cmd'
 if (-not (Test-Path $Run)) { Die "$Run is missing - the update did not go in (see above). Run this installer again." }
+if ($Setup) {  # (the installer has made the shortcuts and the uninstaller itself)
+  Say 'PopkaStudio is ready'
+  Stop-Transcript | Out-Null
+  exit 0
+}
 $Ico = Join-Path $Dir '.tools\popkastudio.ico'
 & $Py -c "from PIL import Image; Image.open(r'$Dir\studio\app\icon.png').save(r'$Ico', sizes=[(16,16),(32,32),(48,48),(256,256)])" 2>$null
 $Menu = Join-Path ([Environment]::GetFolderPath('Programs')) 'PopkaStudio.lnk'
