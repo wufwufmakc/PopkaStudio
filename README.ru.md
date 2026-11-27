@@ -5,6 +5,10 @@
 [English](README.md) · [Видео: с чего всё началось (YouTube)](https://www.youtube.com/watch?v=NHNoKUa2cDg) ·
 [Поддержать проект](#поддержать-проект)
 
+> **Это форк для Windows** проекта [PopaSpinka/PopkaStudio](https://github.com/PopaSpinka/PopkaStudio): тот же редактор
+> плюс классический установщик для Windows 10/11 (`PopkaStudio-Setup.exe` в [Releases](https://github.com/wufwufmakc/PopkaStudio/releases)) —
+> см. [Установка — Windows 10 и 11](#установка--windows-10-и-11). На macOS и Linux всё как в оригинале.
+
 ![PopkaStudio](docs/screenshots/editor.png)
 
 PopkaStudio — редактор интерфейсов для экранов на платах ESP32: круглые часы 1,75″, экран 7″ на ESP32-P4,
