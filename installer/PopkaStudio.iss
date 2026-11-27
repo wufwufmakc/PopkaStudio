@@ -69,14 +69,15 @@ Source: "..\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignorev
 Name: "{app}\projects"; Flags: uninsneveruninstall
 
 [Icons]
-Name: "{userprograms}\PopkaStudio"; Filename: "{app}\bin\popkastudio.cmd"; WorkingDir: "{app}"; \
-  IconFilename: "{app}\installer\popkastudio.ico"; Flags: runminimized
-Name: "{userdesktop}\PopkaStudio"; Filename: "{app}\bin\popkastudio.cmd"; WorkingDir: "{app}"; \
-  IconFilename: "{app}\installer\popkastudio.ico"; Flags: runminimized; Tasks: desktop
+; (the editor in a window of its own: studio\app_win.py with pythonw - no console; bin\popkastudio.cmd is the console way)
+Name: "{userprograms}\PopkaStudio"; Filename: "{app}\.venv\Scripts\pythonw.exe"; Parameters: """{app}\studio\app_win.py"""; \
+  WorkingDir: "{app}"; IconFilename: "{app}\installer\popkastudio.ico"
+Name: "{userdesktop}\PopkaStudio"; Filename: "{app}\.venv\Scripts\pythonw.exe"; Parameters: """{app}\studio\app_win.py"""; \
+  WorkingDir: "{app}"; IconFilename: "{app}\installer\popkastudio.ico"; Tasks: desktop
 
 [Run]
-Filename: "{app}\bin\popkastudio.cmd"; WorkingDir: "{app}"; Description: "{cm:LaunchProgram,PopkaStudio}"; \
-  Flags: postinstall nowait skipifsilent runminimized
+Filename: "{app}\.venv\Scripts\pythonw.exe"; Parameters: """{app}\studio\app_win.py"""; WorkingDir: "{app}"; \
+  Description: "{cm:LaunchProgram,PopkaStudio}"; Flags: postinstall nowait skipifsilent
 
 [UninstallRun]
 ; (a running PopkaStudio holds its Python: stop it first, by its port's owner)
@@ -90,6 +91,7 @@ Type: filesandordirs; Name: "{app}\build"
 Type: filesandordirs; Name: "{app}\tools\fonts"
 Type: filesandordirs; Name: "{app}\studio\__pycache__"
 Type: files; Name: "{app}\install.log"
+Type: files; Name: "{app}\studio\studio.log"
 
 [Code]
 // After the files: install.ps1 -Setup, hidden, its output read line by line (ExecAndLogOutput, Inno Setup 6.3+).

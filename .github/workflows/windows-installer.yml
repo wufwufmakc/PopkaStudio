@@ -87,6 +87,16 @@ jobs:
           $boards | ConvertTo-Json -Depth 3 -Compress | Select-Object -First 1
           if ($page.StatusCode -ne 200) { throw "the page: $($page.StatusCode)" }
 
+      - name: Test - the program's window launcher (starts studio.py, finds Edge, stops)
+        shell: pwsh
+        run: |
+          $out = & "$env:APP\.venv\Scripts\python.exe" "$env:APP\studio\app_win.py" --check
+          $out
+          if ($LASTEXITCODE) { throw "app_win.py --check exited $LASTEXITCODE" }
+          if (-not (Test-Path "$env:APP\.venv\Scripts\pythonw.exe")) { throw 'no pythonw.exe for the shortcut' }
+          Start-Sleep 2
+          try { Invoke-RestMethod http://127.0.0.1:8466/api/about -TimeoutSec 2; throw 'studio.py still running after --check' } catch { if ($_.Exception.Message -like '*still running*') { throw } }
+
       - name: Test - the uninstaller (silent - the user's projects stay)
         shell: pwsh
         run: |
