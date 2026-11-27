@@ -45,6 +45,7 @@ jobs:
         shell: pwsh
         env:
           POPKASTUDIO_SKIP_CORE: "1"
+          UV_PYTHON_PREFERENCE: only-managed  # (uv's own Python in .tools\python, as on a PC without Python - not the runner's)
           POPKASTUDIO_REPO: ${{ github.server_url }}/${{ github.event.pull_request.head.repo.full_name || github.repository }}.git
           POPKASTUDIO_BRANCH: ${{ github.head_ref || github.ref_name }}
         run: |
@@ -56,6 +57,10 @@ jobs:
           $p = Start-Process $exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$app`"", "/LOG=$env:RUNNER_TEMP\setup-inno.log" -Wait -PassThru
           foreach ($l in "$app\setup.log", "$app\install.log") { if (Test-Path $l) { "----- $l"; Get-Content $l } }
           if ($p.ExitCode) { Get-Content "$env:RUNNER_TEMP\setup-inno.log"; throw "setup exited $($p.ExitCode)" }
+          Get-Content "$app\setup.log" -TotalCount 3
+          if (-not (([Environment]::GetEnvironmentVariable('PATH', 'User') -split ';') -contains "$app\.tools\git\cmd")) { throw 'MinGit not on the user PATH' }
+          Get-ChildItem "$app\.tools\python" -Name
+          if (-not (Get-ChildItem "$app\.tools\python" -Name | Where-Object { $_ -like '*x86_64*' })) { throw 'not a 64-bit Python' }
           foreach ($f in '.git', '.tools\git\cmd\git.exe', '.venv\Scripts\python.exe', '.tools\bin\arduino-cli.exe', 'tools\fonts\GoogleSansFlex.ttf', 'bin\popkastudio.cmd', '.tools\setup\unins000.exe') {
             if (-not (Test-Path "$app\$f")) { throw "missing after install: $f" }
           }
@@ -92,6 +97,7 @@ jobs:
         shell: pwsh
         env:
           POPKASTUDIO_SKIP_CORE: "1"
+          UV_PYTHON_PREFERENCE: only-managed  # (uv's own Python in .tools\python, as on a PC without Python - not the runner's)
         run: |
           $exe = (Get-ChildItem installer\Output\PopkaStudio-Setup-*.exe).FullName
           $p = Start-Process $exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$env:APP`"" -Wait -PassThru
@@ -113,6 +119,7 @@ jobs:
           }
           if (-not (Test-Path "$env:APP\projects\test.json")) { throw 'the projects went with the uninstall' }
           if (([Environment]::GetEnvironmentVariable('PATH', 'User') -split ';') -contains "$env:APP\bin") { throw 'bin left on the user PATH' }
+          if (([Environment]::GetEnvironmentVariable('PATH', 'User') -split ';') -contains "$env:APP\.tools\git\cmd") { throw 'git left on the user PATH' }
           Get-ChildItem -Recurse -Force $env:APP | Select-Object -ExpandProperty FullName
 
       - uses: actions/upload-artifact@v4

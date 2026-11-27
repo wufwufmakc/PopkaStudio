@@ -32,6 +32,14 @@ function RunGit {  # (git, its exit code checked; its output into the installer'
 New-Item -ItemType Directory -Force -Path $Dir | Out-Null
 Set-Content -LiteralPath $Log -Value "PopkaStudio setup $(Get-Date -Format s)" -ErrorAction SilentlyContinue
 
+# ---------- 0. A PopkaStudio that is running (this copy's Python, its window): stopped - Windows can't write over it ----------
+Get-NetTCPConnection -LocalPort 8466 -State Listen -ErrorAction SilentlyContinue |
+  ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }
+$venv = Join-Path $Dir '.venv'
+Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($venv, [StringComparison]::OrdinalIgnoreCase) } |
+  ForEach-Object { Say "Stopping PopkaStudio (pid $($_.Id))"; Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue }
+Start-Sleep -Milliseconds 500
+
 # ---------- 1. git ----------
 Write-Host '@@ git'
 $MinGit = Join-Path $Dir '.tools\git'
@@ -52,6 +60,16 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
   [IO.File]::Delete($zip)
   $env:PATH = "$MinGit\cmd;$env:PATH"
   if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Die 'git did not install' }
+}
+
+# The installer's own git, when it was needed: on the user's PATH too (only the user's, no administrator) - the studio
+# runs git by name (its check for updates, Update itself); the uninstaller takes it off again
+if (Test-Path "$MinGit\cmd\git.exe") {
+  $gitCmd = "$MinGit\cmd"
+  $userPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
+  if (-not (($userPath -split ';') -contains $gitCmd)) {
+    [Environment]::SetEnvironmentVariable('PATH', (@($userPath, $gitCmd) | Where-Object { $_ }) -join ';', 'User')
+  }
 }
 
 # ---------- 2. PopkaStudio: a clone (as install.ps1 makes it), or the one already here brought up to date ----------
@@ -79,5 +97,7 @@ if ((Test-Path (Join-Path $Dir '.git')) -and $LASTEXITCODE -eq 0) {
 if (-not (Test-Path (Join-Path $Dir 'install.ps1'))) { Die "$Dir has no install.ps1 - not PopkaStudio's repository?" }
 
 # ---------- 3. Python, arduino-cli, the ESP32 core, the fonts: install.ps1 -Setup (its own @@ steps) ----------
-& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Dir 'install.ps1') -Setup | Out-Host
+# (all of its output - the tools' errors too, uv's included - into setup.log as well: what failed, for a bug report)
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Dir 'install.ps1') -Setup 2>&1 | ForEach-Object { "$_" } |
+  ForEach-Object { Add-Content -LiteralPath $Log -Value $_ -ErrorAction SilentlyContinue; $_ } | Out-Host
 exit $LASTEXITCODE
