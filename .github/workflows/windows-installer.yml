@@ -93,7 +93,9 @@ jobs:
         run: |
           $tag = if ('${{ github.ref_type }}' -eq 'tag') { '${{ github.ref_name }}' } else { 'v${{ steps.v.outputs.version }}-win' }
           $notes = 'Windows 10/11: download PopkaStudio-Setup-${{ steps.v.outputs.version }}.exe below and run it (no administrator needed). ' +
-                   'The first install downloads Python, arduino-cli and the ESP32 tools (1.5-3 GB, 5-20 minutes).'
+                   'The first install downloads Python, arduino-cli and the ESP32 tools (1.5-3 GB, 5-20 minutes).' +
+                   "`n`nWindows support is fresh - please test it! Found a bug? Open an issue or write to wufwufmakc@gmail.com " +
+                   '(attach %LOCALAPPDATA%\PopkaStudio\install.log).'
           gh release view $tag 2>$null
           if ($LASTEXITCODE) { gh release create $tag --target '${{ github.sha }}' --title "PopkaStudio ${{ steps.v.outputs.version }} for Windows" --notes $notes }
           gh release upload $tag (Get-ChildItem installer\Output\*.exe).FullName --clobber
