@@ -9,6 +9,11 @@ on:
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
+  workflow_call:  # (upstream-sync.yml: the merged code tested before it goes into main - no release from there)
+    inputs:
+      ref:
+        type: string
+        required: true
 
 permissions:
   contents: write  # (the release on a tag)
@@ -19,6 +24,8 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
 
       - name: Version (studio.py's VERSION)
         id: v
@@ -80,13 +87,26 @@ jobs:
           $boards | ConvertTo-Json -Depth 3 -Compress | Select-Object -First 1
           if ($page.StatusCode -ne 200) { throw "the page: $($page.StatusCode)" }
 
+      - name: Test - the uninstaller (silent - the user's projects stay)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "$env:APP\projects" | Out-Null
+          Set-Content "$env:APP\projects\test.json" '{}'
+          $p = Start-Process "$env:APP\unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait -PassThru
+          Start-Sleep 3  # (the uninstaller finishes in a copy of itself)
+          foreach ($gone in '.venv', '.tools', 'studio\studio.py', 'bin') {
+            if (Test-Path "$env:APP\$gone") { throw "left after uninstall: $gone" }
+          }
+          if (-not (Test-Path "$env:APP\projects\test.json")) { throw 'the projects went with the uninstall' }
+          Get-ChildItem -Recurse $env:APP | Select-Object -ExpandProperty FullName
+
       - uses: actions/upload-artifact@v4
         with:
           name: PopkaStudio-Setup-${{ steps.v.outputs.version }}
           path: installer/Output/*.exe
 
       - name: Into the release (a tag v*, or main - v<VERSION>-win)
-        if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
+        if: (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main') && github.event_name != 'workflow_call' && !inputs.ref
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
