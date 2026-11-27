@@ -5,6 +5,10 @@
 [English](README.md) · [Видео: с чего всё началось (YouTube)](https://www.youtube.com/watch?v=NHNoKUa2cDg) ·
 [Поддержать проект](#поддержать-проект)
 
+> **Это форк для Windows** проекта [PopaSpinka/PopkaStudio](https://github.com/PopaSpinka/PopkaStudio): тот же редактор
+> плюс классический установщик для Windows 10/11 (`PopkaStudio-Setup.exe` в [Releases](https://github.com/wufwufmakc/PopkaStudio/releases)) —
+> см. [Установка — Windows 10 и 11](#установка--windows-10-и-11). На macOS и Linux всё как в оригинале.
+
 ![PopkaStudio](docs/screenshots/editor.png)
 
 PopkaStudio — редактор интерфейсов для экранов на платах ESP32: круглые часы 1,75″, экран 7″ на ESP32-P4,
@@ -128,7 +132,26 @@ popkastudio
 перезапустится, а ты ещё раз сделаешь **Load**. В окне сердечка видна и твоя версия, кнопка **Check** — проверить
 сразу. (Снова запустить `install.sh` — тоже обновление.)
 
-Windows не поддерживается.
+## Установка — Windows 10 и 11
+
+**Установщик:** скачайте `PopkaStudio-Setup-<версия>.exe` из
+[Releases](https://github.com/wufwufmakc/PopkaStudio/releases) и запустите. Права администратора не нужны: он ставит
+PopkaStudio в `%LOCALAPPDATA%\PopkaStudio`, потом скачивает Python, arduino-cli и инструменты ESP32 (1,5–3 ГБ, первый
+раз 5–20 минут) и добавляет PopkaStudio в меню «Пуск» и в «Приложения» (чтобы удалить). Проекты при удалении остаются.
+
+Или в PowerShell (права администратора не нужны, нужен git):
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/wufwufmakc/PopkaStudio/main/install.ps1 | iex"
+```
+
+Или в скачанной копии: `powershell -ExecutionPolicy Bypass -File .\install.ps1`. Нужен
+[git](https://git-scm.com/download/win) (`winget install --id Git.Git -e`). Ставится то же, что ставит `install.sh`,
+в `%USERPROFILE%\PopkaStudio`, плюс ярлык **PopkaStudio** в меню «Пуск» и команда `popkastudio` (в новом окне
+терминала). Драйвер для USB платы на Windows 10 и 11 не нужен: она появляется как COM-порт. Для **+** в Видео нужен
+ffmpeg: `winget install ffmpeg`.
+
+Поддержка Windows новая и пришла из форка: если что-то не работает, откройте issue с логом из окна PopkaStudio.
 
 ## Первые шаги
 

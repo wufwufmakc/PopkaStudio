@@ -55,6 +55,11 @@ SKETCH = os.path.join(BUILD, "PopkaWatch")  # what "Flash" compiles: firmware/Po
 PREVIEW = os.path.join(BUILD, "preview")      # halo_assets.py's previews of the fonts the page asked for
 PROJECTS = os.path.join(ROOT, "projects")
 PORT = 8466
+WINDOWS = os.name == "nt"  # (Windows: COM ports, .exe tools, install.ps1 — the rest is the same everywhere)
+if WINDOWS:  # (the console's code page can't print "—" or "…": the log goes out as UTF-8, never a crash on a print)
+    for _s in (sys.stdout, sys.stderr):
+        with contextlib.suppress(AttributeError, ValueError):
+            _s.reconfigure(encoding="utf-8", errors="replace")
 
 
 def bring_old_data():
@@ -984,6 +989,17 @@ def wifi_info():
 board_lock = threading.Lock()
 
 
+def port_present(port):
+    """The board's port is back (after a restart): a file on Mac and Linux (/dev/…), a COM name on Windows."""
+    if not WINDOWS:
+        return os.path.exists(port)
+    try:
+        from serial.tools import list_ports
+        return any(p.device.upper() == port.upper() for p in list_ports.comports())
+    except Exception:  # noqa: BLE001 — no pyserial: just try to open it
+        return True
+
+
 def board_open(port):
     import serial  # pyserial (tools/boardio.py has it too)
     s = serial.Serial()
@@ -1232,7 +1248,7 @@ def set_board_time(port, log):
     """After Flash: wait for the board's start, send it the computer's time (the command time)."""
     time.sleep(1)
     for _ in range(40):  # the board restarts: its port comes back
-        if os.path.exists(port):
+        if port_present(port):
             break
         time.sleep(0.25)
     with board_lock:
@@ -1260,12 +1276,16 @@ MUSIC_BIN, MUSIC_AT = os.path.join(ROOT, "firmware/music/music.bin"), 0x910000
 
 
 def esptool_cmd():
-    """esptool: the one in the ESP32 core arduino-cli installed (Mac, Linux), or one on the PATH / in this Python."""
+    """esptool: the one in the ESP32 core arduino-cli installed (Mac, Linux, Windows), or one on the PATH / in this Python."""
     for name in ("esptool", "esptool.py"):
         if shutil.which(name):
             return [shutil.which(name)]
-    for home in ("~/Library/Arduino15", "~/.arduino15"):
-        hits = sorted(glob.glob(os.path.join(os.path.expanduser(home), "packages/esp32/tools/esptool_py/*/esptool")))
+    homes = ["~/Library/Arduino15", "~/.arduino15"]
+    if WINDOWS:
+        homes = [os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~/AppData/Local")), "Arduino15")]
+    exe = "esptool.exe" if WINDOWS else "esptool"
+    for home in homes:
+        hits = sorted(glob.glob(os.path.join(os.path.expanduser(home), "packages/esp32/tools/esptool_py/*/" + exe)))
         if hits:
             return [hits[-1]]
     return [PY, "-m", "esptool"]
@@ -1275,7 +1295,7 @@ def board_ask(port, command, answer, seconds=1.5):
     """After a restart: wait for the board's start, send it a command, give back what it said (until answer)."""
     time.sleep(1)
     for _ in range(40):  # the board restarts: its port comes back
-        if os.path.exists(port):
+        if port_present(port):
             break
         time.sleep(0.25)
     with board_lock:
@@ -1881,7 +1901,7 @@ def current_version():
 
 def installed_copy():
     """A clone of PopkaStudio's own repository (as install.sh makes it): it checks for updates by itself and updates."""
-    if PRETEND or not os.path.isdir(os.path.join(ROOT, ".git")) or not os.path.isfile(os.path.join(ROOT, "install.sh")):
+    if PRETEND or not os.path.isdir(os.path.join(ROOT, ".git")) or not os.path.isfile(os.path.join(ROOT, "install.ps1" if WINDOWS else "install.sh")):
         return False
     r = subprocess.run(["git", "-C", ROOT, "remote", "get-url", "origin"], capture_output=True, text=True)
     return r.returncode == 0 and UPDATE_REPO.lower() in r.stdout.strip().lower()
@@ -1934,6 +1954,8 @@ def update_info(now=False):
 def update_command(changed=False):
     """What to paste into Terminal when Update can't (~ for the home folder; changed by hand — put aside first: git stash
     keeps them, git stash pop brings them back)."""
+    if WINDOWS:  # (PowerShell)
+        return f"cd '{ROOT}'; " + ("git stash; " if changed else "") + "powershell -ExecutionPolicy Bypass -File .\\install.ps1"
     home = os.path.expanduser("~")
     where = "~" + ROOT[len(home):] if ROOT.startswith(home + os.sep) else ROOT
     where = where if re.fullmatch(r"[~\w./-]+", where) else shlex.quote(ROOT)
@@ -1956,7 +1978,7 @@ def update_job():
                 upd["log"].append(detail[-2000:])
 
     env = dict(os.environ)
-    extra = [os.path.join(ROOT, ".tools", "bin"), os.path.expanduser("~/.local/bin"), "/opt/homebrew/bin", "/usr/local/bin"]
+    extra = [os.path.join(ROOT, ".tools", "bin")] + ([] if WINDOWS else [os.path.expanduser("~/.local/bin"), "/opt/homebrew/bin", "/usr/local/bin"])
     env["PATH"] = os.pathsep.join(extra + [env.get("PATH", "/usr/bin:/bin")])  # (the Mac app starts with a short PATH)
     git = ["git", "-C", ROOT]
     try:
@@ -1993,7 +2015,9 @@ def update_job():
             return fail("The update can't go over this copy — update in Terminal", r.stdout + r.stderr, True)
         say("Installing", 62)
         # 3. what the new version needs: its install.sh (its "▸" steps → 62–98 %)
-        p = subprocess.Popen(["bash", os.path.join(ROOT, "install.sh")], cwd=ROOT, stdout=subprocess.PIPE,
+        install = (["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", os.path.join(ROOT, "install.ps1")]
+                   if WINDOWS else ["bash", os.path.join(ROOT, "install.sh")])
+        p = subprocess.Popen(install, cwd=ROOT, stdout=subprocess.PIPE,
                              stderr=subprocess.STDOUT, env=env, text=True, bufsize=1)
         out, n = [], 0
         for line in p.stdout:
@@ -2021,6 +2045,9 @@ def restart_soon():
     def go():
         time.sleep(0.4)
         sys.stdout.flush()
+        if WINDOWS:  # (no exec in place on Windows: a new process in this console, this one goes; main() waits for the port)
+            subprocess.Popen([sys.executable] + sys.argv)
+            os._exit(0)
         os.execv(sys.executable, [sys.executable] + sys.argv)
     threading.Thread(target=go, daemon=True).start()
 
@@ -2505,11 +2532,11 @@ def backup_job(port):
 
 def arduino_cli():
     """arduino-cli: the one install.sh put next to PopkaStudio, or one on the PATH."""
-    for path in (os.path.join(ROOT, ".tools", "bin", "arduino-cli"), shutil.which("arduino-cli"),
+    for path in (os.path.join(ROOT, ".tools", "bin", "arduino-cli.exe" if WINDOWS else "arduino-cli"), shutil.which("arduino-cli"),
                  os.path.expanduser("~/.local/bin/arduino-cli"), "/opt/homebrew/bin/arduino-cli", "/usr/local/bin/arduino-cli"):
         if path and os.path.exists(path):
             return path
-    raise RuntimeError("arduino-cli not found: run ./install.sh")
+    raise RuntimeError("arduino-cli not found: run " + ("install.ps1" if WINDOWS else "./install.sh"))
 
 
 def chip_fqbn(port, board):
@@ -2543,9 +2570,26 @@ def own_partitions(board):
     p = passport(board)
     if not p.get("partitions"):
         return []
-    csv = os.path.join(ROOT, "boards", p["id"], p["partitions"])
+    csv = no_spaces(os.path.join(ROOT, "boards", p["id"], p["partitions"]))
+    if WINDOWS:  # (no /bin/cp there; .windows too, in case the core has a hook of that number for Windows)
+        copy = f'cmd /c copy /y "{csv}" "{{build.path}}\\partitions.csv"'
+        return ["--build-property", f"recipe.hooks.prebuild.9.pattern={copy}",
+                "--build-property", f"recipe.hooks.prebuild.9.pattern.windows={copy}",
+                "--build-property", f"upload.maximum_size={p['app_max']}"]
     return ["--build-property", f'recipe.hooks.prebuild.9.pattern=/bin/cp -f "{csv}" "{{build.path}}/partitions.csv"',
             "--build-property", f"upload.maximum_size={p['app_max']}"]
+
+
+def no_spaces(path):
+    """Windows, a user name with a space (C:\\Users\\AI LAB\\...): the ESP32 build's tools don't all quote their paths, so
+    PopkaStudio's folder goes to the compiler by its short 8.3 name (C:\\Users\\AILAB~1\\...). Only ROOT is shortened: the
+    sketch's folder keeps its name (it must match the .ino). Elsewhere, or no short names on that disk — as it is."""
+    if not WINDOWS or " " not in ROOT or not path.startswith(ROOT):
+        return path
+    import ctypes
+    buf = ctypes.create_unicode_buffer(32768)
+    n = ctypes.windll.kernel32.GetShortPathNameW(ROOT, buf, len(buf))
+    return buf.value + path[len(ROOT):] if 0 < n < len(buf) and " " not in buf.value else path
 
 
 def load_commands(port, board="amoled175", way=None):
@@ -2557,8 +2601,10 @@ def load_commands(port, board="amoled175", way=None):
     first = way == passport(board).get("orientation")
     name = "PopkaWatch" if board == "amoled175" else f"PopkaWatch-{board}" + (f"-{way}" if way and not first else "")
     cli, out = arduino_cli(), os.path.join(ROOT, "build", name + tail)
-    return [[cli, "compile", "--fqbn", fqbn, *build_defines(board, way), *own_partitions(board), "--libraries", os.path.join(ROOT, "lib"), "--build-path", out, SKETCH],
-            [cli, "upload", "--fqbn", fqbn, "-p", port, "--input-dir", out, SKETCH]]
+    os.makedirs(out, exist_ok=True)  # (a short name exists only for a folder that exists)
+    out, sketch, lib = no_spaces(out), no_spaces(SKETCH), no_spaces(os.path.join(ROOT, "lib"))
+    return [[cli, "compile", "--fqbn", fqbn, *build_defines(board, way), *own_partitions(board), "--libraries", lib, "--build-path", out, sketch],
+            [cli, "upload", "--fqbn", fqbn, "-p", port, "--input-dir", out, sketch]]
 
 
 # ---------- Flash: one job at a time, the page polls it ----------
@@ -3030,7 +3076,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 n = int(self.headers.get("Content-Length") or 0)
                 if not shutil.which("ffmpeg"):
                     self.rfile.read(n)
-                    return self.send(409, {"error": "Needs ffmpeg: brew install ffmpeg"})
+                    return self.send(409, {"error": "Needs ffmpeg: " + ("winget install ffmpeg" if WINDOWS else "brew install ffmpeg")})
                 qa = urllib.parse.parse_qs(url.query)
                 for_stream = qa.get("stream", [""])[0] == "1"  # (lighter, into videos/stream: the Stream switch)
                 os.makedirs(STREAM if for_stream else VIDEOS, exist_ok=True)
@@ -3223,7 +3269,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
-    allow_reuse_address = True
+    allow_reuse_address = not WINDOWS  # (on Windows it would let a second copy take the same port)
     request_queue_size = 64  # (the page asks for every screen's fonts at once: with 5, some were refused — "Failed to fetch")
 
 
@@ -3264,7 +3310,14 @@ def main():
         PROJECTS = os.path.abspath(sys.argv[sys.argv.index("--projects") + 1])
     else:
         bring_old_data()
-    server = Server(("127.0.0.1", PORT), Handler)
+    for attempt in range(20):  # (a restart on Windows: the old process may still hold the port for a moment)
+        try:
+            server = Server(("127.0.0.1", PORT), Handler)
+            break
+        except OSError:
+            if not WINDOWS or attempt == 19:
+                raise
+            time.sleep(0.25)
     print(f"PopkaStudio: http://localhost:{PORT}  (Ctrl+C — stop)", flush=True)
     try:
         server.serve_forever()

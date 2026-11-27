@@ -5,6 +5,10 @@
 [Русская версия](README.ru.md) · [Video: how it started (YouTube)](https://www.youtube.com/watch?v=NHNoKUa2cDg) ·
 [Support the project](#support-the-project)
 
+> **This is the Windows fork** of [PopaSpinka/PopkaStudio](https://github.com/PopaSpinka/PopkaStudio): the same editor,
+> plus a classic Windows 10/11 installer (`PopkaStudio-Setup.exe` in [Releases](https://github.com/wufwufmakc/PopkaStudio/releases)) —
+> see [Install — Windows 10 and 11](#install--windows-10-and-11). macOS and Linux work as in the original.
+
 ![PopkaStudio](docs/screenshots/editor.png)
 
 PopkaStudio is a visual editor for screen interfaces on ESP32 boards — a round 1.75″ watch, a 7″ ESP32-P4 display,
@@ -131,7 +135,27 @@ since yours. Click it to see what's new in each one, then **Update**: PopkaStudi
 **Load** your project again. The heart's window shows your version too, and its **Check** button checks right away.
 (Running `install.sh` again updates too.)
 
-Windows is not supported.
+## Install — Windows 10 and 11
+
+**The installer:** download `PopkaStudio-Setup-<version>.exe` from
+[Releases](https://github.com/wufwufmakc/PopkaStudio/releases) and run it. No administrator needed: it installs into
+`%LOCALAPPDATA%\PopkaStudio`, then downloads Python, arduino-cli and the ESP32 tools (1.5–3 GB, 5–20 minutes the
+first time), and adds PopkaStudio to the Start menu and to Apps (to uninstall). Your projects stay on an uninstall.
+
+Or in PowerShell (no administrator needed, needs git):
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/wufwufmakc/PopkaStudio/main/install.ps1 | iex"
+```
+
+Or in a copy you cloned: `powershell -ExecutionPolicy Bypass -File .\install.ps1`. It needs
+[git](https://git-scm.com/download/win) (`winget install --id Git.Git -e`) and puts the same things into
+`%USERPROFILE%\PopkaStudio` as `install.sh` does, plus a **PopkaStudio** shortcut in the Start menu and the command
+`popkastudio` (in a new terminal window). The board's USB needs no driver on Windows 10 and 11: it shows up as a COM
+port. Video's **+** needs ffmpeg: `winget install ffmpeg`.
+
+Windows support is new and comes from a fork: if something doesn't work, open an issue with the log from the
+PopkaStudio window.
 
 ## First steps
 
