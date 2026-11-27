@@ -16,12 +16,19 @@
 # native step's exit code is checked instead, the downloads stop on their own errors)
 param([switch]$Setup)
 $ErrorActionPreference = 'Continue'
+# Windows PowerShell started from PowerShell 7 (a terminal, the installer, CI) inherits 7's module path and then can't
+# load its own modules ("The member AuditToString is already present"): only Windows PowerShell's own folders
+if ($PSVersionTable.PSEdition -eq 'Desktop') {
+  $env:PSModulePath = @("$HOME\Documents\WindowsPowerShell\Modules", "$env:ProgramFiles\WindowsPowerShell\Modules",
+                        "$env:SystemRoot\system32\WindowsPowerShell\v1.0\Modules") -join ';'
+}
 $ProgressPreference = 'SilentlyContinue'  # (Invoke-WebRequest's progress bar makes big downloads many times slower)
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
 $Repo = if ($env:POPKASTUDIO_REPO) { $env:POPKASTUDIO_REPO } else { 'https://github.com/wufwufmakc/PopkaStudio.git' }
 $Core = 'esp32:esp32@3.3.11'
 $EspUrl = 'https://espressif.github.io/arduino-esp32/package_esp32_index.json'
+$UvZip = 'https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-pc-windows-msvc.zip'
 $CliZip = 'https://downloads.arduino.cc/arduino-cli/arduino-cli_latest_Windows_64bit.zip'
 
 function Say($t) { Write-Host ''; Write-Host "> $t" -ForegroundColor White }
@@ -71,9 +78,10 @@ $env:PATH = "$Tools;$env:PATH"
 # ---------- 2. Python and its libraries (uv: its own Python, in .venv) ----------
 if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
   Say 'Installing uv (a Python manager) into .tools\bin'
-  $env:UV_INSTALL_DIR = $Tools
-  $env:UV_NO_MODIFY_PATH = '1'
-  Invoke-RestMethod -ErrorAction Stop https://astral.sh/uv/install.ps1 | Invoke-Expression | Out-Null
+  $zip = Join-Path $env:TEMP 'uv.zip'  # (uv's own release; its zip holds uv.exe, uvx.exe, uvw.exe)
+  Invoke-WebRequest -UseBasicParsing -ErrorAction Stop $UvZip -OutFile $zip
+  Expand-Archive -Force -ErrorAction Stop $zip $Tools
+  Remove-Item $zip
   if (-not (Test-Path "$Tools\uv.exe")) { Die 'uv did not install (see above).' }
 }
 Say 'Python and its libraries'
