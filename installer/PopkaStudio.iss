@@ -51,6 +51,10 @@ en.StepCore=ESP32 tools (1.5-3 GB, the longest step)
 ru.StepCore=Инструменты ESP32 (1,5-3 ГБ, самый долгий шаг)
 en.StepFonts=Fonts
 ru.StepFonts=Шрифты
+en.DelProjects=Delete your PopkaStudio projects too?%n%nThey are in %1, with the saved Wi-Fi passwords and the copies of boards' firmware. No - they stay, and a new install finds them.
+ru.DelProjects=Удалить и ваши проекты PopkaStudio?%n%nОни лежат в %1 вместе с сохранёнными паролями Wi-Fi и копиями прошивок плат. «Нет» — они останутся, и новая установка их найдёт.
+en.DelTools=Delete the ESP32 tools too (%1, 1.5-3 GB)?%n%nThey are arduino-cli's common folder: say No if you use the Arduino IDE or arduino-cli for other things.
+ru.DelTools=Удалить и инструменты ESP32 (%1, 1,5-3 ГБ)?%n%nЭто общая папка arduino-cli: ответьте «Нет», если пользуетесь Arduino IDE или arduino-cli для чего-то ещё.
 en.Desktop=Create a desktop shortcut
 ru.Desktop=Создать ярлык на рабочем столе
 
@@ -190,4 +194,33 @@ begin
     ShowSteps(StepCount)
   else
     SuppressibleMsgBox(FmtMessage(CustomMessage('ToolsFailed'), [IntToStr(Code), Log]), mbError, MB_OK, IDOK);
+end;
+
+// The uninstall: what the installer and PopkaStudio made goes by itself ([UninstallDelete]); what is the user's - the
+// projects (with the Wi-Fi passwords and the saved firmware) and the ESP32 tools (arduino-cli's common folder) - only
+// when they say yes. Silent uninstall: both stay.
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  App, Arduino: String;
+begin
+  if CurUninstallStep <> usPostUninstall then
+    Exit;
+  App := ExpandConstant('{app}');
+  if DirExists(App + '\projects') and
+     (SuppressibleMsgBox(FmtMessage(CustomMessage('DelProjects'), [App + '\projects']), mbConfirmation, MB_YESNO or MB_DEFBUTTON2, IDNO) = IDYES) then begin
+    DelTree(App + '\projects', True, True, True);
+    DelTree(App + '\studio\secrets', True, True, True);
+    DelTree(App + '\studio\backups', True, True, True);
+    DelTree(App + '\studio\videos', True, True, True);
+  end;
+  Arduino := ExpandConstant('{localappdata}\Arduino15');
+  if DirExists(Arduino) and
+     (SuppressibleMsgBox(FmtMessage(CustomMessage('DelTools'), [Arduino]), mbConfirmation, MB_YESNO or MB_DEFBUTTON2, IDNO) = IDYES) then begin
+    DelTree(Arduino, True, True, True);
+    DelTree(ExpandConstant('{localappdata}\arduino'), True, True, True);  // (arduino-cli's build cache)
+  end;
+  if not DirExists(App + '\projects') then
+    DelTree(App, True, True, True)  // (nothing of the user's left: the folder goes, with anything PopkaStudio made in it)
+  else
+    RemoveDir(App);
 end;
