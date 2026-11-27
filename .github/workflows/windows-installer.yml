@@ -37,14 +37,15 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           Get-ChildItem installer\Output
 
-      - name: Test - install it silently (no ESP32 core)
+      - name: Test - install it silently (no ESP32 core), into a folder with a space, as for a user named "AI LAB"
         shell: pwsh
         env:
           POPKASTUDIO_SKIP_CORE: "1"
         run: |
           $exe = (Get-ChildItem installer\Output\PopkaStudio-Setup-*.exe).FullName
-          $app = Join-Path $env:RUNNER_TEMP 'PopkaStudio'
-          $p = Start-Process $exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=$app", "/LOG=$env:RUNNER_TEMP\setup.log" -Wait -PassThru
+          $app = Join-Path $env:RUNNER_TEMP 'AI LAB\PopkaStudio'
+          $env:TEMP = $env:TMP = (New-Item -ItemType Directory -Force (Join-Path $env:RUNNER_TEMP 'AI LAB\Temp')).FullName
+          $p = Start-Process $exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$app`"", "/LOG=$env:RUNNER_TEMP\setup.log" -Wait -PassThru
           if (Test-Path "$app\install.log") { Get-Content "$app\install.log" }
           if ($p.ExitCode) { Get-Content "$env:RUNNER_TEMP\setup.log"; throw "setup exited $($p.ExitCode)" }
           foreach ($f in '.venv\Scripts\python.exe', '.tools\bin\arduino-cli.exe', 'tools\fonts\GoogleSansFlex.ttf', 'bin\popkastudio.cmd') {
@@ -73,6 +74,7 @@ jobs:
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
           if (-not $ok) { throw 'the editor did not answer on :8466' }
           "version: $($about.version)"
+          & "$env:APP\.venv\Scripts\python.exe" -c "import sys; sys.argv = ['x']; sys.path.insert(0, r'$env:APP\studio'); import studio as s; print('no_spaces:', s.no_spaces(s.SKETCH)); print(s.own_partitions('amoled175g'))"
           $boards | ConvertTo-Json -Depth 3 -Compress | Select-Object -First 1
           if ($page.StatusCode -ne 200) { throw "the page: $($page.StatusCode)" }
 

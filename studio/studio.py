@@ -2570,9 +2570,26 @@ def own_partitions(board):
     p = passport(board)
     if not p.get("partitions"):
         return []
-    csv = os.path.join(ROOT, "boards", p["id"], p["partitions"])
+    csv = no_spaces(os.path.join(ROOT, "boards", p["id"], p["partitions"]))
+    if WINDOWS:  # (no /bin/cp there; .windows too, in case the core has a hook of that number for Windows)
+        copy = f'cmd /c copy /y "{csv}" "{{build.path}}\\partitions.csv"'
+        return ["--build-property", f"recipe.hooks.prebuild.9.pattern={copy}",
+                "--build-property", f"recipe.hooks.prebuild.9.pattern.windows={copy}",
+                "--build-property", f"upload.maximum_size={p['app_max']}"]
     return ["--build-property", f'recipe.hooks.prebuild.9.pattern=/bin/cp -f "{csv}" "{{build.path}}/partitions.csv"',
             "--build-property", f"upload.maximum_size={p['app_max']}"]
+
+
+def no_spaces(path):
+    """Windows, a user name with a space (C:\\Users\\AI LAB\\...): the ESP32 build's tools don't all quote their paths, so
+    PopkaStudio's folder goes to the compiler by its short 8.3 name (C:\\Users\\AILAB~1\\...). Only ROOT is shortened: the
+    sketch's folder keeps its name (it must match the .ino). Elsewhere, or no short names on that disk — as it is."""
+    if not WINDOWS or " " not in ROOT or not path.startswith(ROOT):
+        return path
+    import ctypes
+    buf = ctypes.create_unicode_buffer(32768)
+    n = ctypes.windll.kernel32.GetShortPathNameW(ROOT, buf, len(buf))
+    return buf.value + path[len(ROOT):] if 0 < n < len(buf) and " " not in buf.value else path
 
 
 def load_commands(port, board="amoled175", way=None):
@@ -2584,8 +2601,10 @@ def load_commands(port, board="amoled175", way=None):
     first = way == passport(board).get("orientation")
     name = "PopkaWatch" if board == "amoled175" else f"PopkaWatch-{board}" + (f"-{way}" if way and not first else "")
     cli, out = arduino_cli(), os.path.join(ROOT, "build", name + tail)
-    return [[cli, "compile", "--fqbn", fqbn, *build_defines(board, way), *own_partitions(board), "--libraries", os.path.join(ROOT, "lib"), "--build-path", out, SKETCH],
-            [cli, "upload", "--fqbn", fqbn, "-p", port, "--input-dir", out, SKETCH]]
+    os.makedirs(out, exist_ok=True)  # (a short name exists only for a folder that exists)
+    out, sketch, lib = no_spaces(out), no_spaces(SKETCH), no_spaces(os.path.join(ROOT, "lib"))
+    return [[cli, "compile", "--fqbn", fqbn, *build_defines(board, way), *own_partitions(board), "--libraries", lib, "--build-path", out, sketch],
+            [cli, "upload", "--fqbn", fqbn, "-p", port, "--input-dir", out, sketch]]
 
 
 # ---------- Flash: one job at a time, the page polls it ----------

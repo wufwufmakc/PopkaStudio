@@ -38,6 +38,13 @@ function Die($t) {
   if ($Setup) { Stop-Transcript | Out-Null }
   exit 1
 }
+function Get-Zip($url) {  # (a tool's zip into .tools\bin. Not via %TEMP%: for a user name with a space it is a short
+  # 8.3 path (C:\Users\AILAB~1\...) that Windows PowerShell's Remove-Item can't find; .NET deletes by any path)
+  $zip = Join-Path $Tools 'download.zip'
+  Invoke-WebRequest -UseBasicParsing -ErrorAction Stop $url -OutFile $zip
+  Expand-Archive -Force -ErrorAction Stop -LiteralPath $zip -DestinationPath $Tools
+  [IO.File]::Delete($zip)
+}
 function Run {  # (a native tool; its exit code checked. A plain function: its -flags go through untouched)
   $exe, $rest = $args
   & $exe @rest | Out-Host  # (through the host: install.log keeps it too)
@@ -78,10 +85,7 @@ $env:PATH = "$Tools;$env:PATH"
 # ---------- 2. Python and its libraries (uv: its own Python, in .venv) ----------
 if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
   Say 'Installing uv (a Python manager) into .tools\bin'
-  $zip = Join-Path $env:TEMP 'uv.zip'  # (uv's own release; its zip holds uv.exe, uvx.exe, uvw.exe)
-  Invoke-WebRequest -UseBasicParsing -ErrorAction Stop $UvZip -OutFile $zip
-  Expand-Archive -Force -ErrorAction Stop $zip $Tools
-  Remove-Item $zip
+  Get-Zip $UvZip  # (uv's own release; its zip holds uv.exe, uvx.exe, uvw.exe)
   if (-not (Test-Path "$Tools\uv.exe")) { Die 'uv did not install (see above).' }
 }
 Say 'Python and its libraries'
@@ -95,10 +99,7 @@ if (-not (Test-Path $Cli)) {
   $found = Get-Command arduino-cli -ErrorAction SilentlyContinue
   if ($found) { $Cli = $found.Source } else {
     Say 'Installing arduino-cli into .tools\bin'
-    $zip = Join-Path $env:TEMP 'arduino-cli.zip'
-    Invoke-WebRequest -UseBasicParsing -ErrorAction Stop $CliZip -OutFile $zip
-    Expand-Archive -Force -ErrorAction Stop $zip $Tools
-    Remove-Item $zip
+    Get-Zip $CliZip
   }
 }
 $cores = (& $Cli core list 2>$null) -join "`n"
