@@ -5,18 +5,10 @@
 [English](README.md) · [Видео: с чего всё началось (YouTube)](https://www.youtube.com/watch?v=NHNoKUa2cDg) ·
 [Поддержать проект](#поддержать-проект)
 
-> **Это форк для Windows** проекта [PopaSpinka/PopkaStudio](https://github.com/PopaSpinka/PopkaStudio): тот же редактор
-> плюс классический установщик для Windows 10/11 (`PopkaStudio-Setup.exe` в [Releases](https://github.com/wufwufmakc/PopkaStudio/releases)) —
-> см. [Установка — Windows 10 и 11](#установка--windows-10-и-11). На macOS и Linux всё как в оригинале.
->
-> **Поддержка Windows свежая, ребята, тестируйте!** Нашли баг? Откройте
-> [issue](https://github.com/wufwufmakc/PopkaStudio/issues) или напишите на **wufwufmakc@gmail.com**
-> (очень поможет лог установки: `%LOCALAPPDATA%\PopkaStudio\install.log`).
-
 ![PopkaStudio](docs/screenshots/editor.png)
 
 PopkaStudio — редактор интерфейсов для экранов на платах ESP32: круглые часы 1,75″, экран 7″ на ESP32-P4,
-квадратный экран 4″ и, от сообщества, WT32-SC01 Plus с экраном 3,5″. Собираешь циферблат, приложения и экраны из готовых частей, связываешь их, как кадры в Figma, и жмёшь
+квадратный экран 4″, часы-прямоугольник 2,06″ и, от сообщества, WT32-SC01 Plus с экраном 3,5″. Собираешь циферблат, приложения и экраны из готовых частей, связываешь их, как кадры в Figma, и жмёшь
 **Load** — плата получает прошивку ровно из того, что ты сделал, и работает плавно, 60 кадров в секунду.
 
 Превью — не картинка-макет, а **код самой платы**, собранный в WebAssembly. Что видно в редакторе, то и на часах,
@@ -64,6 +56,8 @@ PopkaStudio — редактор интерфейсов для экранов н
   переключатели и настройки — в правой карточке.
 - **В прошивку попадает только добавленное.** Что не используешь — того в прошивке нет совсем: ни кода, ни шрифтов,
   датчики выключены.
+- **macOS, Linux и Windows** (Windows — новое в 2.8, от [wufwufmakc](https://github.com/wufwufmakc)) — редактор
+  — страница в браузере; маленький помощник на компьютере собирает прошивку и пишет её по USB.
 
 ![Карта экранов](docs/screenshots/map.png)
 
@@ -95,6 +89,14 @@ PopkaStudio — редактор интерфейсов для экранов н
   в FAT32.
   **Поддержка ранняя:** настоящая батарея, пробуждение движением и время, пока плата выключена, ещё не проверены, GPS
   пока не используется. Видео нет.
+- [Waveshare ESP32-S3-Touch-AMOLED-2.06](https://www.waveshare.com/esp32-s3-touch-amoled-2.06.htm) (новая в 2.8):
+  часы-прямоугольник 2,06″ с ремешком, AMOLED 410 × 502, тач, чипы круглой 1.75C (датчик движения, динамик и
+  микрофоны), часы, которые хранят время, и слот microSD. Все экраны разложены под прямоугольные часы: главный — дата и
+  погода сверху, галерея таблетками, Weather, Settings, About плитками, Power, Battery, Steps, Music, Recorder, радио
+  «постером», игры, Pomodoro вдоль стекла, Agent и виджеты погоды; Always On, кнопки, подъём руки и Bluetooth тоже.
+  **Поддержка ранняя:** пока только вертикально; настоящая батарея, пробуждение касанием, Bluetooth с телефона и Live
+  на плате ещё не проверены, вибромотор пока не используется, а скругление углов стекла — на глаз: что-то у самого
+  края может чуть прятаться под ним. Видео нет.
 
 Плата выбирается при создании проекта; каждый проект — для одной платы.
 
@@ -106,6 +108,8 @@ PopkaStudio — редактор интерфейсов для экранов н
 ![Плата 7″ в PopkaStudio](docs/screenshots/p4.png)
 
 ![Квадратная плата 4″ в PopkaStudio](docs/screenshots/lcd4b.png)
+
+![Шесть плат в стартовом окне PopkaStudio, выбраны часы 2.06](docs/screenshots/amoled206.png)
 
 ## Установка — macOS и Linux
 
@@ -138,24 +142,31 @@ popkastudio
 
 ## Установка — Windows 10 и 11
 
-**Установщик:** скачайте `PopkaStudio-Setup-<версия>.exe` из
-[Releases](https://github.com/wufwufmakc/PopkaStudio/releases) и запустите. Права администратора не нужны: он ставит
-PopkaStudio в `%LOCALAPPDATA%\PopkaStudio`, потом скачивает Python, arduino-cli и инструменты ESP32 (1,5–3 ГБ, первый
-раз 5–20 минут) и добавляет PopkaStudio в меню «Пуск» и в «Приложения» (чтобы удалить). Проекты при удалении остаются.
-
-Или в PowerShell (права администратора не нужны, нужен git):
+Новое в 2.8, порт — **[wufwufmakc](https://github.com/wufwufmakc)**. В PowerShell (права администратора не нужны):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/wufwufmakc/PopkaStudio/main/install.ps1 | iex"
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/PopaSpinka/PopkaStudio/main/install.ps1 | iex"
 ```
 
-Или в скачанной копии: `powershell -ExecutionPolicy Bypass -File .\install.ps1`. Нужен
-[git](https://git-scm.com/download/win) (`winget install --id Git.Git -e`). Ставится то же, что ставит `install.sh`,
-в `%USERPROFILE%\PopkaStudio`, плюс ярлык **PopkaStudio** в меню «Пуск» и команда `popkastudio` (в новом окне
-терминала). Драйвер для USB платы на Windows 10 и 11 не нужен: она появляется как COM-порт. Для **+** в Видео нужен
-ffmpeg: `winget install ffmpeg`.
+Нужен [git](https://git-scm.com/download/win): если его нет — `winget install --id Git.Git -e`, потом открой новое окно
+PowerShell. Хочешь сначала посмотреть? `git clone https://github.com/PopaSpinka/PopkaStudio.git`, прочитай
+`install.ps1`, запусти `powershell -ExecutionPolicy Bypass -File .\install.ps1`.
 
-Поддержка Windows новая и пришла из форка: если что-то не работает, откройте issue с логом из окна PopkaStudio.
+Ставится то же, что ставит `install.sh`, в `%USERPROFILE%\PopkaStudio` (инструменты ESP32 — 1,5–3 ГБ, первый раз 5–20
+минут), плюс ярлык **PopkaStudio** в меню «Пуск» и команда `popkastudio`.
+
+Потом: **PopkaStudio** в меню «Пуск» или в новом окне терминала:
+
+```powershell
+popkastudio
+```
+
+Откроется **http://localhost:8466**. Маленькое окно PopkaStudio на панели задач — его помощник: закрой его, чтобы
+остановить PopkaStudio. Драйвер для платы не нужен — она появляется как COM-порт. Обновления — как на Mac: число на
+сердечке, потом **Update**. Для **+** в Видео нужен ffmpeg: `winget install ffmpeg`.
+
+Поддержка Windows новая: если что-то не работает, открой [issue](https://github.com/PopaSpinka/PopkaStudio/issues) с
+логом из окна PopkaStudio.
 
 ## Первые шаги
 
@@ -177,7 +188,8 @@ ffmpeg: `winget install ffmpeg`.
 ## Если что-то не так
 
 - **Платы нет в списке** — другой кабель (бывают только для зарядки). Linux: вышел и вошёл после установки? ModemManager
-  в Ubuntu может занимать порт: `sudo systemctl stop ModemManager`.
+  в Ubuntu может занимать порт: `sudo systemctl stop ModemManager`. Windows: COM-порт открывается только в одной
+  программе — закрой Arduino IDE или монитор порта, если они его держат.
 - **Load не достучался до платы** — PopkaStudio покажет, как быть: держать **BOOT**, переподключить кабель, потом
   **Load again**.
 - **Load не прошёл** — журнал под кнопкой Load; открой [issue](https://github.com/PopaSpinka/PopkaStudio/issues) с ним.
@@ -265,6 +277,9 @@ PopkaStudio бесплатная и с открытым кодом. Если х�
 Музыка плеера с карты microSD на AMOLED-1.75 — от **[YKatrechko](https://github.com/YKatrechko)**; в том же
 пул-реквесте — проверка экрана, тача, звука, диктофона и Bluetooth на плате 1.75 без «C». Приложение **Pomodoro** —
 тоже от YKatrechko: таймер, его круглый экран и настройки. Спасибо!
+
+PopkaStudio на Windows — установщик, запуск, COM-порты и обновление — от
+**[wufwufmakc](https://github.com/wufwufmakc)**. Спасибо!
 
 Код написан с нуля. Движение — по открытым опубликованным числам, ничьи прошивки и приложения не разбирались, кода из
 проектов под GPL нет. Откуда что взято и под какими лицензиями чужие части — в таблицах раздела

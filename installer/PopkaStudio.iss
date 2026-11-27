@@ -1,10 +1,10 @@
 ﻿; (UTF-8 with a BOM: Inno Setup reads the Russian lines right only so)
-; PopkaStudio-Setup.exe - the classic Windows installer (Inno Setup 6). Built by .github/workflows/windows-installer.yml:
-;   iscc /DAppVersion=2.7 installer\PopkaStudio.iss      -> installer\Output\PopkaStudio-Setup-2.7.exe
-; It holds PopkaStudio's own files (a few tens of MB); what is big - Python, arduino-cli, the ESP32 tools (1.5-3 GB) -
-; install.ps1 -Setup downloads after the files are in, as install.ps1 does for a clone. For this user only, no
-; administrator: %LOCALAPPDATA%\PopkaStudio (a short path: the ESP32 build doesn't like long ones). Your projects
-; (projects\) stay on an uninstall; what the installer downloaded goes.
+; PopkaStudio-Setup.exe - the classic Windows installer (Inno Setup 6.3+). Built by .github/workflows/windows-installer.yml:
+;   iscc /DAppVersion=2.8 installer\PopkaStudio.iss      -> installer\Output\PopkaStudio-Setup-2.8.exe
+; The .exe holds no PopkaStudio: bootstrap.ps1 makes the same git clone install.ps1 makes (git: the one on the PATH, or a
+; portable MinGit in .tools\git), so the studio's own Update works for this copy as for any other; then install.ps1
+; -Setup. Run again, it updates (git pull). For this user only, no administrator: %LOCALAPPDATA%\PopkaStudio (a short
+; path: the ESP32 build doesn't like long ones). The installer's own files go to .tools\setup (.tools: not in git).
 
 #ifndef AppVersion
   #define AppVersion "0.0"
@@ -14,9 +14,9 @@
 AppId={{6C1F3B0E-2F5B-4C1E-9C55-9F0A2B7D4E61}
 AppName=PopkaStudio
 AppVersion={#AppVersion}
-AppVerName=PopkaStudio {#AppVersion}
+AppVerName=PopkaStudio
 AppPublisher=PopkaStudio
-AppPublisherURL=https://github.com/wufwufmakc/PopkaStudio
+AppPublisherURL=https://github.com/PopaSpinka/PopkaStudio
 DefaultDirName={localappdata}\PopkaStudio
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
@@ -26,7 +26,8 @@ MinVersion=10.0
 OutputDir=Output
 OutputBaseFilename=PopkaStudio-Setup-{#AppVersion}
 SetupIconFile=popkastudio.ico
-UninstallDisplayIcon={app}\installer\popkastudio.ico
+UninstallFilesDir={app}\.tools\setup
+UninstallDisplayIcon={app}\.tools\setup\popkastudio.ico
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
@@ -37,10 +38,14 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 Name: "ru"; MessagesFile: "compiler:Languages\Russian.isl"
 
 [CustomMessages]
-en.Tools=Downloading Python, arduino-cli and the ESP32 tools (1.5-3 GB, 5-20 minutes the first time)...
-ru.Tools=Загрузка Python, arduino-cli и инструментов ESP32 (1,5-3 ГБ, первый раз 5-20 минут)...
-en.ToolsFailed=PopkaStudio's files are in, but downloading its tools failed (exit %1). Check the internet and run the installer again. The log: %2
-ru.ToolsFailed=Файлы PopkaStudio установлены, но загрузить инструменты не удалось (код %1). Проверьте интернет и запустите установщик ещё раз. Лог: %2
+en.Tools=Downloading PopkaStudio and its tools (1.5-3 GB, 5-20 minutes the first time)...
+ru.Tools=Загрузка PopkaStudio и её инструментов (1,5-3 ГБ, первый раз 5-20 минут)...
+en.ToolsFailed=Setting PopkaStudio up failed (exit %1). Check the internet and run the installer again: it goes on from where it stopped. The logs: %2
+ru.ToolsFailed=Не удалось установить PopkaStudio (код %1). Проверьте интернет и запустите установщик ещё раз: он продолжит с того же места. Логи: %2
+en.StepGit=git (to get PopkaStudio and its updates)
+ru.StepGit=git (чтобы скачать PopkaStudio и её обновления)
+en.StepCode=PopkaStudio
+ru.StepCode=PopkaStudio
 en.StepUv=Python manager (uv)
 ru.StepUv=Менеджер Python (uv)
 en.StepPython=Python and its libraries
@@ -62,47 +67,34 @@ ru.Desktop=Создать ярлык на рабочем столе
 Name: "desktop"; Description: "{cm:Desktop}"; Flags: unchecked
 
 [Files]
-Source: "..\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion; \
-  Excludes: "\.git,\.git\*,\.github\*,\docs\*,\studio\app\node_modules\*,\installer\Output\*,\.venv\*,\.tools\*,\build\*,\projects\*,\studio\secrets\*,\studio\backups\*,\studio\videos\*,\tools\fonts\*"
-
-[Dirs]
-Name: "{app}\projects"; Flags: uninsneveruninstall
+Source: "bootstrap.ps1"; Flags: dontcopy
+Source: "popkastudio.ico"; DestDir: "{app}\.tools\setup"; Flags: ignoreversion
 
 [Icons]
-; (the editor in a window of its own: studio\app_win.py with pythonw - no console; bin\popkastudio.cmd is the console way)
-Name: "{userprograms}\PopkaStudio"; Filename: "{app}\.venv\Scripts\pythonw.exe"; Parameters: """{app}\studio\app_win.py"""; \
-  WorkingDir: "{app}"; IconFilename: "{app}\installer\popkastudio.ico"
-Name: "{userdesktop}\PopkaStudio"; Filename: "{app}\.venv\Scripts\pythonw.exe"; Parameters: """{app}\studio\app_win.py"""; \
-  WorkingDir: "{app}"; IconFilename: "{app}\installer\popkastudio.ico"; Tasks: desktop
+Name: "{userprograms}\PopkaStudio"; Filename: "{app}\bin\popkastudio.cmd"; WorkingDir: "{app}"; \
+  IconFilename: "{app}\.tools\setup\popkastudio.ico"; Flags: runminimized
+Name: "{userdesktop}\PopkaStudio"; Filename: "{app}\bin\popkastudio.cmd"; WorkingDir: "{app}"; \
+  IconFilename: "{app}\.tools\setup\popkastudio.ico"; Flags: runminimized; Tasks: desktop
 
 [Run]
-Filename: "{app}\.venv\Scripts\pythonw.exe"; Parameters: """{app}\studio\app_win.py"""; WorkingDir: "{app}"; \
-  Description: "{cm:LaunchProgram,PopkaStudio}"; Flags: postinstall nowait skipifsilent
+Filename: "{app}\bin\popkastudio.cmd"; WorkingDir: "{app}"; Description: "{cm:LaunchProgram,PopkaStudio}"; \
+  Flags: postinstall nowait skipifsilent runminimized
 
 [UninstallRun]
 ; (a running PopkaStudio holds its Python: stop it first, by its port's owner)
 Filename: "powershell.exe"; Parameters: "-NoProfile -Command ""Get-NetTCPConnection -LocalPort 8466 -State Listen -ErrorAction SilentlyContinue | ForEach-Object {{ Stop-Process -Id $_.OwningProcess -Force }"""; \
   Flags: runhidden; RunOnceId: "StopStudio"
 
-[UninstallDelete]
-Type: filesandordirs; Name: "{app}\.venv"
-Type: filesandordirs; Name: "{app}\.tools"
-Type: filesandordirs; Name: "{app}\build"
-Type: filesandordirs; Name: "{app}\tools\fonts"
-Type: filesandordirs; Name: "{app}\studio\__pycache__"
-Type: files; Name: "{app}\install.log"
-Type: files; Name: "{app}\studio\studio.log"
-
 [Code]
-// After the files: install.ps1 -Setup, hidden, its output read line by line (ExecAndLogOutput, Inno Setup 6.3+).
-// Its "@@ <step>" lines move the list of steps under the progress bar; any other line is shown as the detail.
+// After the files: bootstrap.ps1 (git, the clone, then install.ps1 -Setup), hidden, its output read line by line
+// (ExecAndLogOutput). Its "@@ <step>" lines move the list of steps under the progress bar; other lines are the detail.
 const
-  StepCount = 5;
+  StepCount = 7;
 var
-  StepKeys: array[0..4] of String;
-  StepNames: array[0..4] of String;
-  StepPct: array[0..5] of Integer;
-  StepLabels: array[0..4] of TNewStaticText;
+  StepKeys: array[0..6] of String;
+  StepNames: array[0..6] of String;
+  StepPct: array[0..7] of Integer;
+  StepLabels: array[0..6] of TNewStaticText;
   CurrentStep: Integer;
 
 procedure ShowSteps(Current: Integer);
@@ -127,33 +119,38 @@ begin
   WizardForm.ProgressGauge.Position := StepPct[Current];
 end;
 
-procedure InitializeWizard;
-var
-  I: Integer;
+procedure AddStep(I: Integer; Key, Msg: String; Pct: Integer);
 begin
-  StepKeys[0] := 'uv';     StepNames[0] := CustomMessage('StepUv');     StepPct[0] := 5;
-  StepKeys[1] := 'python'; StepNames[1] := CustomMessage('StepPython'); StepPct[1] := 10;
-  StepKeys[2] := 'cli';    StepNames[2] := CustomMessage('StepCli');    StepPct[2] := 25;
-  StepKeys[3] := 'core';   StepNames[3] := CustomMessage('StepCore');   StepPct[3] := 30;
-  StepKeys[4] := 'fonts';  StepNames[4] := CustomMessage('StepFonts');  StepPct[4] := 95;
-  StepPct[5] := 100;
-  for I := 0 to StepCount - 1 do begin
-    StepLabels[I] := TNewStaticText.Create(WizardForm);
-    StepLabels[I].Parent := WizardForm.InstallingPage;
-    StepLabels[I].Left := WizardForm.ProgressGauge.Left;
-    StepLabels[I].Top := WizardForm.ProgressGauge.Top + WizardForm.ProgressGauge.Height + ScaleY(18) + I * ScaleY(22);
-    StepLabels[I].AutoSize := True;
-    StepLabels[I].Visible := False;
-  end;
+  StepKeys[I] := Key;
+  StepNames[I] := CustomMessage(Msg);
+  StepPct[I] := Pct;
+  StepLabels[I] := TNewStaticText.Create(WizardForm);
+  StepLabels[I].Parent := WizardForm.InstallingPage;
+  StepLabels[I].Left := WizardForm.ProgressGauge.Left;
+  StepLabels[I].Top := WizardForm.ProgressGauge.Top + WizardForm.ProgressGauge.Height + ScaleY(14) + I * ScaleY(20);
+  StepLabels[I].AutoSize := True;
+  StepLabels[I].Visible := False;
 end;
 
-procedure OnToolsLine(const S: String; const Error, FirstLine: Boolean);
+procedure InitializeWizard;
+begin
+  AddStep(0, 'git', 'StepGit', 3);
+  AddStep(1, 'code', 'StepCode', 8);
+  AddStep(2, 'uv', 'StepUv', 15);
+  AddStep(3, 'python', 'StepPython', 20);
+  AddStep(4, 'cli', 'StepCli', 30);
+  AddStep(5, 'core', 'StepCore', 35);
+  AddStep(6, 'fonts', 'StepFonts', 95);
+  StepPct[7] := 100;
+end;
+
+procedure OnSetupLine(const S: String; const Error, FirstLine: Boolean);
 var
   I: Integer;
   Line: String;
 begin
   Line := Trim(S);
-  if Copy(Line, 1, 8) = '@@ info ' then begin  // (what is downloading, how much, how fast)
+  if Copy(Line, 1, 8) = '@@ info ' then begin  // (what is downloading, how much, how fast - if install.ps1 says)
     WizardForm.FilenameLabel.Caption := Copy(Line, 9, 140);
     Exit;
   end;
@@ -174,10 +171,12 @@ end;
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   Code, I: Integer;
-  Log: String;
+  App: String;
 begin
   if CurStep <> ssPostInstall then
     Exit;
+  App := ExpandConstant('{app}');
+  ExtractTemporaryFile('bootstrap.ps1');
   WizardForm.StatusLabel.Caption := CustomMessage('Tools');
   WizardForm.FilenameLabel.Caption := '';
   WizardForm.ProgressGauge.Style := npbstNormal;
@@ -187,20 +186,63 @@ begin
     StepLabels[I].Visible := True;
   CurrentStep := 0;
   ShowSteps(0);
-  Log := ExpandConstant('{app}\install.log');
   if not ExecAndLogOutput(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
-              '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\install.ps1') + '" -Setup',
-              ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, Code, @OnToolsLine) then
+              '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{tmp}\bootstrap.ps1') + '" -Dir "' + App + '"',
+              App, SW_HIDE, ewWaitUntilTerminated, Code, @OnSetupLine) then
     Code := -1;
   if Code = 0 then
     ShowSteps(StepCount)
   else
-    SuppressibleMsgBox(FmtMessage(CustomMessage('ToolsFailed'), [IntToStr(Code), Log]), mbError, MB_OK, IDOK);
+    SuppressibleMsgBox(FmtMessage(CustomMessage('ToolsFailed'), [IntToStr(Code), App + '\setup.log, ' + App + '\install.log']),
+                       mbError, MB_OK, IDOK);
 end;
 
-// The uninstall: what the installer and PopkaStudio made goes by itself ([UninstallDelete]); what is the user's - the
-// projects (with the Wi-Fi passwords and the saved firmware) and the ESP32 tools (arduino-cli's common folder) - only
-// when they say yes. Silent uninstall: both stay.
+// The uninstall: PopkaStudio's folder is a git clone the installer didn't unpack - it goes here, all of it, but what is
+// the user's: the projects (with the Wi-Fi passwords and the saved firmware) and the ESP32 tools (arduino-cli's common
+// folder) go only when they say yes. Silent uninstall: both stay.
+procedure DelAllBut(Dir: String; Keep: String);  // (Keep: '|a|b|' - names in Dir that stay)
+var
+  F: TFindRec;
+begin
+  if FindFirst(Dir + '\*', F) then
+    try
+      repeat
+        if (F.Name <> '.') and (F.Name <> '..') and (Pos('|' + Lowercase(F.Name) + '|', Keep) = 0) then begin
+          if F.Attributes and FILE_ATTRIBUTE_DIRECTORY <> 0 then
+            DelTree(Dir + '\' + F.Name, True, True, True)
+          else
+            DeleteFile(Dir + '\' + F.Name);
+        end;
+      until not FindNext(F);
+    finally
+      FindClose(F);
+    end;
+end;
+
+// The studio's own Update runs install.ps1 without -Setup, which puts {app}\bin on the user's PATH: take it off again.
+procedure RemoveFromUserPath(Dir: String);
+var
+  Path, Rest, Part, Kept: String;
+  I: Integer;
+begin
+  if not RegQueryStringValue(HKCU, 'Environment', 'Path', Path) then
+    Exit;
+  Rest := Path + ';';
+  Kept := '';
+  repeat
+    I := Pos(';', Rest);
+    Part := Copy(Rest, 1, I - 1);
+    Rest := Copy(Rest, I + 1, Length(Rest));
+    if (Part <> '') and (CompareText(RemoveBackslashUnlessRoot(Part), RemoveBackslashUnlessRoot(Dir)) <> 0) then begin
+      if Kept <> '' then
+        Kept := Kept + ';';
+      Kept := Kept + Part;
+    end;
+  until Rest = '';
+  if Kept <> Path then
+    RegWriteExpandStringValue(HKCU, 'Environment', 'Path', Kept);
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   App, Arduino: String;
@@ -208,21 +250,18 @@ begin
   if CurUninstallStep <> usPostUninstall then
     Exit;
   App := ExpandConstant('{app}');
-  if DirExists(App + '\projects') and
-     (SuppressibleMsgBox(FmtMessage(CustomMessage('DelProjects'), [App + '\projects']), mbConfirmation, MB_YESNO or MB_DEFBUTTON2, IDNO) = IDYES) then begin
-    DelTree(App + '\projects', True, True, True);
-    DelTree(App + '\studio\secrets', True, True, True);
-    DelTree(App + '\studio\backups', True, True, True);
-    DelTree(App + '\studio\videos', True, True, True);
-  end;
+  RemoveFromUserPath(App + '\bin');
   Arduino := ExpandConstant('{localappdata}\Arduino15');
   if DirExists(Arduino) and
      (SuppressibleMsgBox(FmtMessage(CustomMessage('DelTools'), [Arduino]), mbConfirmation, MB_YESNO or MB_DEFBUTTON2, IDNO) = IDYES) then begin
     DelTree(Arduino, True, True, True);
     DelTree(ExpandConstant('{localappdata}\arduino'), True, True, True);  // (arduino-cli's build cache)
   end;
-  if not DirExists(App + '\projects') then
-    DelTree(App, True, True, True)  // (nothing of the user's left: the folder goes, with anything PopkaStudio made in it)
-  else
-    RemoveDir(App);
+  if DirExists(App + '\projects') and
+     (SuppressibleMsgBox(FmtMessage(CustomMessage('DelProjects'), [App + '\projects']), mbConfirmation, MB_YESNO or MB_DEFBUTTON2, IDNO) = IDNO) then begin
+    DelAllBut(App, '|projects|studio|');
+    DelAllBut(App + '\studio', '|secrets|backups|videos|');
+    RemoveDir(App + '\studio');
+  end else
+    DelTree(App, True, True, True);
 end;

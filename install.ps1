@@ -1,14 +1,14 @@
 # PopkaStudio installer for Windows 10 and 11 (install.sh does the same on macOS and Linux). Everything goes into
 # PopkaStudio's own folder (.venv, .tools) - nothing system-wide, no administrator rights.
 #
-#   powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/wufwufmakc/PopkaStudio/main/install.ps1 | iex"
+#   powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/PopaSpinka/PopkaStudio/main/install.ps1 | iex"
 #   or, in a copy you cloned:  powershell -ExecutionPolicy Bypass -File .\install.ps1     (run it again any time to update)
 #
 # It installs: uv (Python and its libraries numpy, Pillow, pyserial), arduino-cli and the ESP32 core 3.3.11 (to build
 # and upload the firmware), the fonts, the command popkastudio (bin\popkastudio.cmd) and a Start menu shortcut.
 # Needs git (winget install --id Git.Git -e). The board's USB (ESP32-S3/P4 native USB) needs no driver on Windows 10+.
 #
-# -Setup: run by the classic installer (PopkaStudio-Setup.exe, installer/PopkaStudio.iss) in the folder it unpacked -
+# -Setup: for the classic installer (installer\PopkaStudio.iss clones, then runs this; the studio's Update too) -
 # no git, no shortcut and no PATH (the installer makes its own), the log in install.log next to it.
 # POPKASTUDIO_SKIP_CORE=1: everything but the ESP32 core (a test run: the editor works, Load doesn't).
 # (This file is plain ASCII: Windows PowerShell 5.1 reads a script without a BOM in the system's code page.)
@@ -25,7 +25,7 @@ if ($PSVersionTable.PSEdition -eq 'Desktop') {
 $ProgressPreference = 'SilentlyContinue'  # (Invoke-WebRequest's progress bar makes big downloads many times slower)
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
-$Repo = if ($env:POPKASTUDIO_REPO) { $env:POPKASTUDIO_REPO } else { 'https://github.com/wufwufmakc/PopkaStudio.git' }
+$Repo = if ($env:POPKASTUDIO_REPO) { $env:POPKASTUDIO_REPO } else { 'https://github.com/PopaSpinka/PopkaStudio.git' }
 $Core = 'esp32:esp32@3.3.11'
 $EspUrl = 'https://espressif.github.io/arduino-esp32/package_esp32_index.json'
 $UvZip = 'https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-pc-windows-msvc.zip'
@@ -39,47 +39,12 @@ function Die($t) {
   if ($Setup) { Stop-Transcript | Out-Null }
   exit 1
 }
-function Get-Size($paths) {  # (bytes in these files and folders, those that exist)
-  $sum = [long]0
-  foreach ($p in $paths) {
-    if (-not $p -or -not (Test-Path -LiteralPath $p)) { continue }
-    $item = Get-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue
-    if ($item -is [IO.FileInfo]) { $sum += $item.Length; continue }
-    $m = Get-ChildItem -LiteralPath $p -Recurse -File -Force -ErrorAction SilentlyContinue | Measure-Object Length -Sum
-    if ($m.Sum) { $sum += [long]$m.Sum }
-  }
-  $sum
-}
-function Watch {  # Watch 'what' @(paths that grow) exe args... - a long download with what, how much and how fast:
-  # every second "@@ info <what>: 812 MB, 9.4 MB/s - <its last line>" for the installer's window (a line now and then here)
-  $what, $paths, $exe, $rest = $args
-  $q = @($rest | ForEach-Object { $a = [string]$_; if ($a -match '[\s"]') { '"' + $a.Replace('"', '\"') + '"' } else { $a } })
-  $out = Join-Path $Tools 'step.out'; $err = Join-Path $Tools 'step.err'
-  $p = Start-Process -FilePath $exe -ArgumentList $q -NoNewWindow -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
-  $null = $p.Handle  # (so ExitCode is kept after it ends)
-  $base = Get-Size $paths; $prev = $base; $tick = 0; $speeds = @()
-  while (-not $p.WaitForExit(1000)) {
-    $tick++
-    $now = Get-Size $paths
-    $speeds = @($speeds + [math]::Max(0, $now - $prev))[-5..-1] | Where-Object { $_ -ne $null }  # (over 5 s: smoother)
-    $prev = $now
-    $mbs = ($speeds | Measure-Object -Average).Average / 1MB
-    $line = ''
-    try { $line = (@(Get-Content -LiteralPath $out, $err -Tail 3 -ErrorAction SilentlyContinue) | Where-Object { $_.Trim() })[-1] } catch {}
-    $msg = '{0}: {1:N0} MB, {2:N1} MB/s' -f $what, ([math]::Max(0, $now - $base) / 1MB), $mbs
-    if ($line) { $msg += ' - ' + $line.Trim() }
-    if ($Setup) { Write-Host "@@ info $msg" } elseif ($tick % 5 -eq 0) { Write-Host "  $msg" }
-  }
-  $p.WaitForExit()
-  Get-Content -LiteralPath $out, $err -ErrorAction SilentlyContinue | Out-Host  # (all of it into install.log)
-  Remove-Item -LiteralPath $out, $err -ErrorAction SilentlyContinue
-  if ($p.ExitCode -ne 0) { Die "$what failed: $exe $($rest -join ' ') (exit $($p.ExitCode))" }
-}
-function Get-Zip($what, $url) {  # (a tool's zip into .tools\bin. Not via %TEMP%: for a user name with a space it is a short
+function Get-Zip($url) {  # (a tool's zip into .tools\bin. Not via %TEMP%: for a user name with a space it is a short
   # 8.3 path (C:\Users\AILAB~1\...) that Windows PowerShell's Remove-Item can't find; .NET deletes by any path)
   $zip = Join-Path $Tools 'download.zip'
   if (Get-Command curl.exe -ErrorAction SilentlyContinue) {  # (Windows 10+ has curl: much faster than Invoke-WebRequest)
-    Watch "Downloading $what" @($zip) curl.exe -fsSL --retry 3 -o $zip $url
+    & curl.exe -fsSL --retry 3 -o $zip $url
+    if ($LASTEXITCODE -ne 0) { Die "Can't download $url (curl exit $LASTEXITCODE)" }
   } else {
     Invoke-WebRequest -UseBasicParsing -ErrorAction Stop $url -OutFile $zip
   }
@@ -127,7 +92,7 @@ $env:PATH = "$Tools;$env:PATH"
 Mark uv
 if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
   Say 'Installing uv (a Python manager) into .tools\bin'
-  Get-Zip uv $UvZip  # (uv's own release; its zip holds uv.exe, uvx.exe, uvw.exe)
+  Get-Zip $UvZip  # (uv's own release; its zip holds uv.exe, uvx.exe, uvw.exe)
   if (-not (Test-Path "$Tools\uv.exe")) { Die 'uv did not install (see above).' }
 }
 Mark python
@@ -135,10 +100,11 @@ Say 'Python and its libraries'
 # (uv's Python and its cache inside PopkaStudio's folder too: an uninstall takes them, nothing is left in %APPDATA%)
 $env:UV_PYTHON_INSTALL_DIR = Join-Path $Dir '.tools\python'
 $env:UV_CACHE_DIR = Join-Path $Dir '.tools\uv-cache'
-$uvDirs = @($env:UV_PYTHON_INSTALL_DIR, $env:UV_CACHE_DIR)
-Watch 'Python 3.12' $uvDirs uv venv --python 3.12 --allow-existing .venv
 $Py = Join-Path $Dir '.venv\Scripts\python.exe'
-Watch 'numpy, Pillow, pyserial' $uvDirs uv pip install --python $Py numpy pillow pyserial
+# (made once: an update runs this while PopkaStudio itself runs on .venv's python.exe, and Windows can't write over a
+# program that is running - uv venv --allow-existing would fail there; the libraries below are checked every time)
+if (-not (Test-Path $Py)) { Run uv venv --quiet --python 3.12 --allow-existing .venv }
+Run uv pip install --quiet --python $Py numpy pillow pyserial
 
 # ---------- 3. arduino-cli and the ESP32 core (Load: build and upload the firmware) ----------
 Mark cli
@@ -147,7 +113,7 @@ if (-not (Test-Path $Cli)) {
   $found = Get-Command arduino-cli -ErrorAction SilentlyContinue
   if ($found) { $Cli = $found.Source } else {
     Say 'Installing arduino-cli into .tools\bin'
-    Get-Zip arduino-cli $CliZip
+    Get-Zip $CliZip
   }
 }
 Mark core
@@ -156,9 +122,7 @@ if ($env:POPKASTUDIO_SKIP_CORE -eq '1') { Note '(the ESP32 core skipped: POPKAST
 elseif ($cores -notmatch '(?m)^esp32:esp32 +3\.3\.11 ') {
   Say 'The ESP32 tools - the longest step (1.5-3 GB, 5-20 minutes)'
   Run $Cli core update-index --additional-urls $EspUrl
-  # (arduino-cli downloads into its staging folder, then unpacks: that folder grows while it downloads)
-  $staging = Join-Path $env:LOCALAPPDATA 'Arduino15\staging'
-  Watch 'ESP32 tools' @($staging) $Cli core install $Core --additional-urls $EspUrl
+  Run $Cli core install $Core --additional-urls $EspUrl
 }
 
 # ---------- 4. The fonts (Google Sans Flex, Font Awesome Free: from their own repositories) ----------

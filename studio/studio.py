@@ -29,6 +29,7 @@ import os
 import re
 import shlex
 import shutil
+import socket
 import socketserver
 import struct
 import subprocess
@@ -56,10 +57,12 @@ PREVIEW = os.path.join(BUILD, "preview")      # halo_assets.py's previews of the
 PROJECTS = os.path.join(ROOT, "projects")
 PORT = 8466
 WINDOWS = os.name == "nt"  # (Windows: COM ports, .exe tools, install.ps1 — the rest is the same everywhere)
+TERMINAL = "PowerShell" if WINDOWS else "Terminal"  # (where the update's command goes when Update can't)
 if WINDOWS:  # (the console's code page can't print "—" or "…": the log goes out as UTF-8, never a crash on a print)
     for _s in (sys.stdout, sys.stderr):
         with contextlib.suppress(AttributeError, ValueError):
             _s.reconfigure(encoding="utf-8", errors="replace")
+    os.environ.setdefault("PYTHONUTF8", "1")  # (the Python tools it starts: as popkastudio.cmd sets it, also when started by hand)
 
 
 def bring_old_data():
@@ -79,7 +82,7 @@ def bring_old_data():
             os.rmdir(src)
 
 
-VERSION = "2.7"  # PopkaStudio's version (the About window; the release notes)
+VERSION = "2.8"  # PopkaStudio's version (the About window; the release notes)
 
 sys.path.insert(0, os.path.join(ROOT, "tools"))
 import halo_assets as ha  # noqa: E402 — the board's font and image code
@@ -220,7 +223,7 @@ def sc_font(layer, i, rect=False):
 def uses_steps(layer, rect=False):
     """The layer shows today's steps (the motion chip's pedometer runs, Raise does not wake). A rectangle has no motion chip."""
     kind = layer["type"]
-    return not rect and (kind in ("steps", "stepring", "infoline") or kind in STEPS_SCREEN
+    return (not rect or rect == "watch") and (kind in ("steps", "stepring", "infoline") or kind in STEPS_SCREEN
             or (kind == "curve" and layer.get("what") in ("steps", "datesteps")))
 FX = {"zoom": "HALO_FX_ZOOM", "fade": "HALO_FX_FADE", "slide": "HALO_FX_SLIDE"}  # lib/Halo: halo_nav_face_open
 MAX_SCREENS, MAX_LAYERS = 24, 32  # what the page's engine has room for (engine/studio_api.h)
@@ -502,6 +505,28 @@ SQUARE_APP_FONTS = {
 def is_square(board):
     p = passport(board)
     return bool(p.get("compact")) and p.get("shape") == "rect" and p.get("w") == p.get("h")
+
+
+# A rectangular watch (a passport's "watch": the 2.06, 410 x 502 — HALO_WATCH in its port) lays some screens out as
+# watch screens (web/mockups/watch206-look.html, direction B): pills the whole width, the round watch's sizes. The fonts
+# they need beyond the small rectangle's: a pill's title, its icon (with the live weather's sky), the hourly pill's degrees
+WATCH_FONTS = [
+    "font  gl_w_t28    GoogleSansFlex.ttf  28  latin punct \"é\"  @wght=620,wdth=104,ROND=100   # a pill's title",
+    "font  gl_w_ic30   fa-solid-900.ttf    30  " + " ".join(f"0x{c:04x}" for c in ICONS.values()) + " 0xf6c4 0xf73d   # a pill's icon, the sky",
+    "font  gl_w_n26    GoogleSansFlex.ttf  26  digits \"°-\"  @wght=660,ROND=100   # Weather: the hourly pill's degrees",
+    "font  gl_w_n30    GoogleSansFlex.ttf  30  digits \" .%°V—−-KBdg\"  @wght=660,ROND=100   # About's tiles, Power's pills: the values"]
+
+
+# A rectangular watch's own fonts of an app (only with its layer): the Recorder's timer, Pomodoro's time — the square's
+# (recorder_rect.h, pomodoro_rect.h)
+WATCH_APP_FONTS = {
+    "recorder": ["font  gl_q_n64    GoogleSansFlex.ttf  64  digits \":\"  @wght=660,ROND=100   # Recorder: the timer"],
+    "pomodoro": ["font  gl_q_pm_n104  GoogleSansFlex.ttf  104  digits \":\" @wght=660,ROND=100   # Pomodoro: the time"],
+}
+
+
+def is_watch(board):
+    return bool(passport(board).get("watch"))
 
 
 # The round board's apps of its own (shade_round.h): only in a firmware with them; the page's engine — always (build.sh)
@@ -1140,7 +1165,8 @@ class LiveLink:
                 if stop:
                     self.cv.wait(0.2)
                     continue
-                port = self.port if self.port and os.path.exists(self.port) else next((p["port"] for p in usb_ports()), "")
+                if ser is None:  # (the port it was given, while it is there — asked only to connect: on Windows that's the port list)
+                    port = self.port if self.port and port_present(self.port) else next((p["port"] for p in usb_ports()), "")
                 project, version = self.project, self.version
             if ser is None:
                 try:
@@ -1354,7 +1380,9 @@ def c_string(text):
 
 
 def is_rect(board):
-    return passport(board).get("shape") != "round"
+    """A rectangle's board → True, a rectangular watch's → "watch" (a rectangle too, with some of the round's ways)."""
+    p = passport(board)
+    return False if p.get("shape") == "round" else "watch" if p.get("watch") else True
 
 
 def font_spec(layer, rect=False):
@@ -1410,7 +1438,7 @@ ICON_SETS = {"weather": "face", "wxicon": "big", "hourly": "small"}
 
 def icon_set(layer, rect=False):
     kind = layer["type"]
-    if rect and kind == "hourly":  # (a line and captions: no icons)
+    if rect is True and kind == "hourly":  # (a line and captions: no icons; a watch's — a pill with them, as the round's)
         return None
     if kind == "forecast":  # (the hourly pill's small ones)
         return ("small", float(layer["scale"]))
@@ -1645,11 +1673,18 @@ def write_sketch(project, folder, meta=None):
         conf += fit(RECT_FONTS) + (COMPACT_FONTS if small else [])
         square = is_square(project.get("board"))
         conf += SQUARE_FONTS if square else []
-        for key, lines in [*RECT_APP_FONTS.items(), *(SQUARE_APP_FONTS.items() if square else [])]:
+        conf += WATCH_FONTS if is_watch(project.get("board")) else []
+        if is_watch(project.get("board")) and any(layer["type"] == "shade" for layer in all_layers):
+            conf += ROUND_APP_FONTS["shade"]  # (a rectangular watch's panel is the round one: shade_round.h)
+        if is_watch(project.get("board")) and any(layer["type"] == "radio" for layer in all_layers):
+            conf += ROUND_APP_FONTS["radio"]  # (a rectangular watch's radio poster: the round one's words — radio_rect.h)
+        watch = is_watch(project.get("board"))
+        for key, lines in [*RECT_APP_FONTS.items(), *(SQUARE_APP_FONTS.items() if square else []),
+                           *(WATCH_APP_FONTS.items() if watch else [])]:
             kinds = key if isinstance(key, tuple) else (key,)
             if any(layer["type"] in kinds for layer in all_layers):
-                conf += (lines if lines in SQUARE_APP_FONTS.values() else COMPACT_APP_FONTS[key] if small and key in COMPACT_APP_FONTS
-                         else fit(lines))
+                conf += (lines if lines in SQUARE_APP_FONTS.values() or lines in WATCH_APP_FONTS.values()
+                         else COMPACT_APP_FONTS[key] if small and key in COMPACT_APP_FONTS else fit(lines))
     else:  # (the round board's own: only with their layer; not in the template — the page's engine builds them itself)
         for kind, lines in ROUND_APP_FONTS.items():
             if any(layer["type"] == kind or (kind == "radio" and (layer["type"] in RADIO_PARTS or layer["type"] in dict(RADIO_SCREENS))) for layer in all_layers):
@@ -1865,7 +1900,8 @@ def build_engine(board, force=False):
     print(f"building the page's engine for {board['short']}{' (' + board['way'] + ')' if board.get('way') else ''} (engine/build.sh) …",
           flush=True)
     square = board.get("compact") and board.get("shape") == "rect" and board.get("w") == board.get("h")  # (this way up's: is_square)
-    fonts = "round" if board.get("shape") == "round" else "square" if square else "compact" if board.get("compact") else "rect"
+    fonts = ("round" if board.get("shape") == "round" else "square" if square else "watch" if board.get("watch")
+             else "compact" if board.get("compact") else "rect")
     subprocess.run([os.path.join(HERE, "engine/build.sh"), board["id"], board["engine"], fonts,
                     *board.get("engine_defines", board.get("defines", []))], check=True, env={**env, "PY": PY})
     return True
@@ -1954,8 +1990,9 @@ def update_info(now=False):
 def update_command(changed=False):
     """What to paste into Terminal when Update can't (~ for the home folder; changed by hand — put aside first: git stash
     keeps them, git stash pop brings them back)."""
-    if WINDOWS:  # (PowerShell)
-        return f"cd '{ROOT}'; " + ("git stash; " if changed else "") + "powershell -ExecutionPolicy Bypass -File .\\install.ps1"
+    if WINDOWS:  # (PowerShell: a ' in the folder's name is written twice)
+        where = ROOT.replace("'", "''")
+        return f"cd '{where}'; " + ("git stash; " if changed else "") + "powershell -ExecutionPolicy Bypass -File .\\install.ps1"
     home = os.path.expanduser("~")
     where = "~" + ROOT[len(home):] if ROOT.startswith(home + os.sep) else ROOT
     where = where if re.fullmatch(r"[~\w./-]+", where) else shlex.quote(ROOT)
@@ -1978,7 +2015,8 @@ def update_job():
                 upd["log"].append(detail[-2000:])
 
     env = dict(os.environ)
-    extra = [os.path.join(ROOT, ".tools", "bin")] + ([] if WINDOWS else [os.path.expanduser("~/.local/bin"), "/opt/homebrew/bin", "/usr/local/bin"])
+    extra = [os.path.join(ROOT, ".tools", "bin")] + ([os.path.join(ROOT, ".tools", "git", "cmd")] if WINDOWS else  # (the installer's git)
+             []) + ([] if WINDOWS else [os.path.expanduser("~/.local/bin"), "/opt/homebrew/bin", "/usr/local/bin"])
     env["PATH"] = os.pathsep.join(extra + [env.get("PATH", "/usr/bin:/bin")])  # (the Mac app starts with a short PATH)
     git = ["git", "-C", ROOT]
     try:
@@ -1987,7 +2025,7 @@ def update_job():
         subprocess.run(git + ["checkout", "--", os.path.relpath(ENGINE_OUT, ROOT)], capture_output=True, env=env)
         changed = subprocess.run(git + ["status", "--porcelain", "--untracked-files=no"], capture_output=True, text=True, env=env)
         if changed.returncode or changed.stdout.strip():
-            return fail("PopkaStudio's files were changed by hand — update in Terminal", changed.stdout + changed.stderr, True)
+            return fail(f"PopkaStudio's files were changed by hand — update in {TERMINAL}", changed.stdout + changed.stderr, True)
         before = subprocess.run(git + ["rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
         # 2. the new code: fetch (its percent → 0–60 %), then a fast-forward
         say("Downloading", 2)
@@ -2012,20 +2050,22 @@ def update_job():
             return fail("Can't download the update", "\n".join(tail))
         r = subprocess.run(git + ["merge", "--ff-only", "FETCH_HEAD"], capture_output=True, text=True, env=env)
         if r.returncode:
-            return fail("The update can't go over this copy — update in Terminal", r.stdout + r.stderr, True)
+            return fail(f"The update can't go over this copy — update in {TERMINAL}", r.stdout + r.stderr, True)
         say("Installing", 62)
-        # 3. what the new version needs: its install.sh (its "▸" steps → 62–98 %)
+        # 3. what the new version needs: its install.sh (its "▸" steps → 62–98 %; install.ps1's — "> ")
         install = (["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", os.path.join(ROOT, "install.ps1")]
                    if WINDOWS else ["bash", os.path.join(ROOT, "install.sh")])
+        if WINDOWS and os.path.isfile(os.path.join(ROOT, ".tools", "setup", "unins000.exe")):
+            install.append("-Setup")  # (a copy from PopkaStudio-Setup.exe: its shortcuts are the installer's, no PATH)
         p = subprocess.Popen(install, cwd=ROOT, stdout=subprocess.PIPE,
-                             stderr=subprocess.STDOUT, env=env, text=True, bufsize=1)
+                             stderr=subprocess.STDOUT, env=env, text=True, errors="replace", bufsize=1)
         out, n = [], 0
         for line in p.stdout:
             line = re.sub(r"\x1b\[[0-9;]*m", "", line).rstrip()
             out = (out + [line])[-40:]
-            if line.startswith("▸"):
+            if line.startswith(("▸", "> ")):
                 n += 1
-                say(line.lstrip("▸ ").strip(), 62 + min(36, n * 6))
+                say(line.lstrip("▸> ").strip(), 62 + min(36, n * 6))
         if p.wait():
             return fail("The update's install step failed", "\n".join(out))
         after = subprocess.run(git + ["rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
@@ -2806,7 +2846,8 @@ def flash_steps(project, port, meta=None):
         if there and there != board:  # (known by its hello or from last time: a minute of compiling saved, the chip stays safe)
             raise RuntimeError(f"This project is for {passport(board)['short']}, the connected board is {passport(there)['short']}")
         for cmd in load_commands(port, board, orientation_of(project)):
-            proc = subprocess.Popen(cmd, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+            proc = subprocess.Popen(cmd, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace",
+                                    bufsize=1)
             too_big = False
             for line in proc.stdout:
                 m = re.search(r"Writing at 0x[0-9a-f]+ (?:\[[^\]]*\]\s+|\.*\s*\()([\d.]+)\s*%", line)
@@ -3288,6 +3329,11 @@ def main():
         with open(sys.argv[sys.argv.index("--square-conf") + 1], "w", encoding="utf-8") as f:
             f.write("\n".join(small + SQUARE_FONTS + [line for lines in SQUARE_APP_FONTS.values() for line in lines]) + "\n")
         return
+    if "--watch-conf" in sys.argv:  # (engine/build.sh: a rectangular watch's — the small rectangle's and its own)
+        with open(sys.argv[sys.argv.index("--watch-conf") + 1], "w", encoding="utf-8") as f:
+            f.write("\n".join(small + WATCH_FONTS + ROUND_APP_FONTS["shade"] + ROUND_APP_FONTS["radio"]
+                               + [line for lines in WATCH_APP_FONTS.values() for line in lines]) + "\n")
+        return
     if "--round-conf" in sys.argv:  # (engine/build.sh: the round board's own, beyond the template's)
         with open(sys.argv[sys.argv.index("--round-conf") + 1], "w", encoding="utf-8") as f:
             f.write("\n".join(line for lines in ROUND_APP_FONTS.values() for line in lines) + "\n")
@@ -3318,6 +3364,11 @@ def main():
             if not WINDOWS or attempt == 19:
                 raise
             time.sleep(0.25)
+    if WINDOWS and socket.has_ipv6:  # (the browser tries localhost as ::1 first: nothing there costs Windows ~0.3 s a request)
+        class Server6(Server):
+            address_family = socket.AF_INET6
+        with contextlib.suppress(OSError):
+            threading.Thread(target=Server6(("::1", PORT), Handler).serve_forever, daemon=True).start()
     print(f"PopkaStudio: http://localhost:{PORT}  (Ctrl+C — stop)", flush=True)
     try:
         server.serve_forever()
