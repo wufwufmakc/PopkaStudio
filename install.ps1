@@ -31,6 +31,7 @@ $EspUrl = 'https://espressif.github.io/arduino-esp32/package_esp32_index.json'
 $UvZip = 'https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-pc-windows-msvc.zip'
 $CliZip = 'https://downloads.arduino.cc/arduino-cli/arduino-cli_latest_Windows_64bit.zip'
 
+function Mark($k) { if ($Setup) { Write-Host "@@ $k" } }  # (a step for the installer's list: uv, python, cli, core, fonts, done)
 function Say($t) { Write-Host ''; Write-Host "> $t" -ForegroundColor White }
 function Note($t) { Write-Host "  $t" }
 function Die($t) {
@@ -41,7 +42,12 @@ function Die($t) {
 function Get-Zip($url) {  # (a tool's zip into .tools\bin. Not via %TEMP%: for a user name with a space it is a short
   # 8.3 path (C:\Users\AILAB~1\...) that Windows PowerShell's Remove-Item can't find; .NET deletes by any path)
   $zip = Join-Path $Tools 'download.zip'
-  Invoke-WebRequest -UseBasicParsing -ErrorAction Stop $url -OutFile $zip
+  if (Get-Command curl.exe -ErrorAction SilentlyContinue) {  # (Windows 10+ has curl: much faster than Invoke-WebRequest)
+    & curl.exe -fsSL --retry 3 -o $zip $url
+    if ($LASTEXITCODE -ne 0) { Die "Can't download $url (curl exit $LASTEXITCODE)" }
+  } else {
+    Invoke-WebRequest -UseBasicParsing -ErrorAction Stop $url -OutFile $zip
+  }
   Expand-Archive -Force -ErrorAction Stop -LiteralPath $zip -DestinationPath $Tools
   [IO.File]::Delete($zip)
 }
@@ -83,11 +89,13 @@ New-Item -ItemType Directory -Force -Path $Tools | Out-Null
 $env:PATH = "$Tools;$env:PATH"
 
 # ---------- 2. Python and its libraries (uv: its own Python, in .venv) ----------
+Mark uv
 if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
   Say 'Installing uv (a Python manager) into .tools\bin'
   Get-Zip $UvZip  # (uv's own release; its zip holds uv.exe, uvx.exe, uvw.exe)
   if (-not (Test-Path "$Tools\uv.exe")) { Die 'uv did not install (see above).' }
 }
+Mark python
 Say 'Python and its libraries'
 # (uv's Python and its cache inside PopkaStudio's folder too: an uninstall takes them, nothing is left in %APPDATA%)
 $env:UV_PYTHON_INSTALL_DIR = Join-Path $Dir '.tools\python'
@@ -97,6 +105,7 @@ $Py = Join-Path $Dir '.venv\Scripts\python.exe'
 Run uv pip install --quiet --python $Py numpy pillow pyserial
 
 # ---------- 3. arduino-cli and the ESP32 core (Load: build and upload the firmware) ----------
+Mark cli
 $Cli = Join-Path $Tools 'arduino-cli.exe'
 if (-not (Test-Path $Cli)) {
   $found = Get-Command arduino-cli -ErrorAction SilentlyContinue
@@ -105,6 +114,7 @@ if (-not (Test-Path $Cli)) {
     Get-Zip $CliZip
   }
 }
+Mark core
 $cores = (& $Cli core list 2>$null) -join "`n"
 if ($env:POPKASTUDIO_SKIP_CORE -eq '1') { Note '(the ESP32 core skipped: POPKASTUDIO_SKIP_CORE)' }
 elseif ($cores -notmatch '(?m)^esp32:esp32 +3\.3\.11 ') {
@@ -114,6 +124,7 @@ elseif ($cores -notmatch '(?m)^esp32:esp32 +3\.3\.11 ') {
 }
 
 # ---------- 4. The fonts (Google Sans Flex, Font Awesome Free: from their own repositories) ----------
+Mark fonts
 Say 'Fonts'
 Run $Py -X utf8 -c "import sys; sys.path.insert(0, 'tools'); import halo_assets as h; [h.font_path(n) for n in ('GoogleSansFlex.ttf', 'fa-solid-900.ttf')]"
 
@@ -121,6 +132,7 @@ Run $Py -X utf8 -c "import sys; sys.path.insert(0, 'tools'); import halo_assets 
 $Run = Join-Path $Dir 'bin\popkastudio.cmd'
 if (-not (Test-Path $Run)) { Die "$Run is missing - the update did not go in (see above). Run this installer again." }
 if ($Setup) {  # (the installer has made the shortcuts and the uninstaller itself)
+  Mark done
   Say 'PopkaStudio is ready'
   Stop-Transcript | Out-Null
   exit 0
