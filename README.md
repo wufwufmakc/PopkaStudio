@@ -131,7 +131,22 @@ since yours. Click it to see what's new in each one, then **Update**: PopkaStudi
 **Load** your project again. The heart's window shows your version too, and its **Check** button checks right away.
 (Running `install.sh` again updates too.)
 
-Windows is not supported.
+## Install — Windows 10 and 11
+
+In PowerShell (no administrator needed):
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/wufwufmakc/PopkaStudio/main/install.ps1 | iex"
+```
+
+Or in a copy you cloned: `powershell -ExecutionPolicy Bypass -File .\install.ps1`. It needs
+[git](https://git-scm.com/download/win) (`winget install --id Git.Git -e`) and puts the same things into
+`%USERPROFILE%\PopkaStudio` as `install.sh` does, plus a **PopkaStudio** shortcut in the Start menu and the command
+`popkastudio` (in a new terminal window). The board's USB needs no driver on Windows 10 and 11: it shows up as a COM
+port. Video's **+** needs ffmpeg: `winget install ffmpeg`.
+
+Windows support is new and comes from a fork: if something doesn't work, open an issue with the log from the
+PopkaStudio window.
 
 ## First steps
 

@@ -128,7 +128,21 @@ popkastudio
 перезапустится, а ты ещё раз сделаешь **Load**. В окне сердечка видна и твоя версия, кнопка **Check** — проверить
 сразу. (Снова запустить `install.sh` — тоже обновление.)
 
-Windows не поддерживается.
+## Установка — Windows 10 и 11
+
+В PowerShell (права администратора не нужны):
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/wufwufmakc/PopkaStudio/main/install.ps1 | iex"
+```
+
+Или в скачанной копии: `powershell -ExecutionPolicy Bypass -File .\install.ps1`. Нужен
+[git](https://git-scm.com/download/win) (`winget install --id Git.Git -e`). Ставится то же, что ставит `install.sh`,
+в `%USERPROFILE%\PopkaStudio`, плюс ярлык **PopkaStudio** в меню «Пуск» и команда `popkastudio` (в новом окне
+терминала). Драйвер для USB платы на Windows 10 и 11 не нужен: она появляется как COM-порт. Для **+** в Видео нужен
+ffmpeg: `winget install ffmpeg`.
+
+Поддержка Windows новая и пришла из форка: если что-то не работает, откройте issue с логом из окна PopkaStudio.
 
 ## Первые шаги
 
