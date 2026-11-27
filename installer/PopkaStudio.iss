@@ -147,6 +147,10 @@ var
   Line: String;
 begin
   Line := Trim(S);
+  if Copy(Line, 1, 8) = '@@ info ' then begin  // (what is downloading, how much, how fast)
+    WizardForm.FilenameLabel.Caption := Copy(Line, 9, 140);
+    Exit;
+  end;
   if Copy(Line, 1, 3) = '@@ ' then begin
     Line := Trim(Copy(Line, 4, 40));
     if Line = 'done' then

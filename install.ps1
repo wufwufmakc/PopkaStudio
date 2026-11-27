@@ -39,12 +39,47 @@ function Die($t) {
   if ($Setup) { Stop-Transcript | Out-Null }
   exit 1
 }
-function Get-Zip($url) {  # (a tool's zip into .tools\bin. Not via %TEMP%: for a user name with a space it is a short
+function Get-Size($paths) {  # (bytes in these files and folders, those that exist)
+  $sum = [long]0
+  foreach ($p in $paths) {
+    if (-not $p -or -not (Test-Path -LiteralPath $p)) { continue }
+    $item = Get-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue
+    if ($item -is [IO.FileInfo]) { $sum += $item.Length; continue }
+    $m = Get-ChildItem -LiteralPath $p -Recurse -File -Force -ErrorAction SilentlyContinue | Measure-Object Length -Sum
+    if ($m.Sum) { $sum += [long]$m.Sum }
+  }
+  $sum
+}
+function Watch {  # Watch 'what' @(paths that grow) exe args... - a long download with what, how much and how fast:
+  # every second "@@ info <what>: 812 MB, 9.4 MB/s - <its last line>" for the installer's window (a line now and then here)
+  $what, $paths, $exe, $rest = $args
+  $q = @($rest | ForEach-Object { $a = [string]$_; if ($a -match '[\s"]') { '"' + $a.Replace('"', '\"') + '"' } else { $a } })
+  $out = Join-Path $Tools 'step.out'; $err = Join-Path $Tools 'step.err'
+  $p = Start-Process -FilePath $exe -ArgumentList $q -NoNewWindow -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
+  $null = $p.Handle  # (so ExitCode is kept after it ends)
+  $base = Get-Size $paths; $prev = $base; $tick = 0; $speeds = @()
+  while (-not $p.WaitForExit(1000)) {
+    $tick++
+    $now = Get-Size $paths
+    $speeds = @($speeds + [math]::Max(0, $now - $prev))[-5..-1] | Where-Object { $_ -ne $null }  # (over 5 s: smoother)
+    $prev = $now
+    $mbs = ($speeds | Measure-Object -Average).Average / 1MB
+    $line = ''
+    try { $line = (@(Get-Content -LiteralPath $out, $err -Tail 3 -ErrorAction SilentlyContinue) | Where-Object { $_.Trim() })[-1] } catch {}
+    $msg = '{0}: {1:N0} MB, {2:N1} MB/s' -f $what, ([math]::Max(0, $now - $base) / 1MB), $mbs
+    if ($line) { $msg += ' - ' + $line.Trim() }
+    if ($Setup) { Write-Host "@@ info $msg" } elseif ($tick % 5 -eq 0) { Write-Host "  $msg" }
+  }
+  $p.WaitForExit()
+  Get-Content -LiteralPath $out, $err -ErrorAction SilentlyContinue | Out-Host  # (all of it into install.log)
+  Remove-Item -LiteralPath $out, $err -ErrorAction SilentlyContinue
+  if ($p.ExitCode -ne 0) { Die "$what failed: $exe $($rest -join ' ') (exit $($p.ExitCode))" }
+}
+function Get-Zip($what, $url) {  # (a tool's zip into .tools\bin. Not via %TEMP%: for a user name with a space it is a short
   # 8.3 path (C:\Users\AILAB~1\...) that Windows PowerShell's Remove-Item can't find; .NET deletes by any path)
   $zip = Join-Path $Tools 'download.zip'
   if (Get-Command curl.exe -ErrorAction SilentlyContinue) {  # (Windows 10+ has curl: much faster than Invoke-WebRequest)
-    & curl.exe -fsSL --retry 3 -o $zip $url
-    if ($LASTEXITCODE -ne 0) { Die "Can't download $url (curl exit $LASTEXITCODE)" }
+    Watch "Downloading $what" @($zip) curl.exe -fsSL --retry 3 -o $zip $url
   } else {
     Invoke-WebRequest -UseBasicParsing -ErrorAction Stop $url -OutFile $zip
   }
@@ -92,7 +127,7 @@ $env:PATH = "$Tools;$env:PATH"
 Mark uv
 if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
   Say 'Installing uv (a Python manager) into .tools\bin'
-  Get-Zip $UvZip  # (uv's own release; its zip holds uv.exe, uvx.exe, uvw.exe)
+  Get-Zip uv $UvZip  # (uv's own release; its zip holds uv.exe, uvx.exe, uvw.exe)
   if (-not (Test-Path "$Tools\uv.exe")) { Die 'uv did not install (see above).' }
 }
 Mark python
@@ -100,9 +135,10 @@ Say 'Python and its libraries'
 # (uv's Python and its cache inside PopkaStudio's folder too: an uninstall takes them, nothing is left in %APPDATA%)
 $env:UV_PYTHON_INSTALL_DIR = Join-Path $Dir '.tools\python'
 $env:UV_CACHE_DIR = Join-Path $Dir '.tools\uv-cache'
-Run uv venv --quiet --python 3.12 --allow-existing .venv
+$uvDirs = @($env:UV_PYTHON_INSTALL_DIR, $env:UV_CACHE_DIR)
+Watch 'Python 3.12' $uvDirs uv venv --python 3.12 --allow-existing .venv
 $Py = Join-Path $Dir '.venv\Scripts\python.exe'
-Run uv pip install --quiet --python $Py numpy pillow pyserial
+Watch 'numpy, Pillow, pyserial' $uvDirs uv pip install --python $Py numpy pillow pyserial
 
 # ---------- 3. arduino-cli and the ESP32 core (Load: build and upload the firmware) ----------
 Mark cli
@@ -111,7 +147,7 @@ if (-not (Test-Path $Cli)) {
   $found = Get-Command arduino-cli -ErrorAction SilentlyContinue
   if ($found) { $Cli = $found.Source } else {
     Say 'Installing arduino-cli into .tools\bin'
-    Get-Zip $CliZip
+    Get-Zip arduino-cli $CliZip
   }
 }
 Mark core
@@ -120,7 +156,9 @@ if ($env:POPKASTUDIO_SKIP_CORE -eq '1') { Note '(the ESP32 core skipped: POPKAST
 elseif ($cores -notmatch '(?m)^esp32:esp32 +3\.3\.11 ') {
   Say 'The ESP32 tools - the longest step (1.5-3 GB, 5-20 minutes)'
   Run $Cli core update-index --additional-urls $EspUrl
-  Run $Cli core install $Core --additional-urls $EspUrl
+  # (arduino-cli downloads into its staging folder, then unpacks: that folder grows while it downloads)
+  $staging = Join-Path $env:LOCALAPPDATA 'Arduino15\staging'
+  Watch 'ESP32 tools' @($staging) $Cli core install $Core --additional-urls $EspUrl
 }
 
 # ---------- 4. The fonts (Google Sans Flex, Font Awesome Free: from their own repositories) ----------
